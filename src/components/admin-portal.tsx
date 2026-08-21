@@ -1,0 +1,1330 @@
+"use client";
+import { useState } from "react";
+import {
+  Activity,
+  AlertTriangle,
+  BellRing,
+  Calendar,
+  CalendarCheck,
+  CalendarDays,
+  Check,
+  CheckCircle2,
+  ChevronRight,
+  Clock3,
+  FileClock,
+  Gauge,
+  LayoutDashboard,
+  Mail,
+  MoreHorizontal,
+  Plus,
+  RefreshCcw,
+  Search,
+  Settings2,
+  ShieldCheck,
+  Stethoscope,
+  UserRound,
+  Users,
+  X,
+} from "lucide-react";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import { DashboardShell, NavItem } from "./dashboard-shell";
+import { useApp } from "@/lib/app-context";
+import { Doctor } from "@/lib/types";
+import { DoctorAvatar, SectionTitle, StatCard, StatusBadge } from "./ui";
+import { GmailLogo, GoogleCalendarLogo } from "./brand";
+const nav: NavItem[] = [
+  { id: "overview", label: "Overview", icon: LayoutDashboard },
+  { id: "doctors", label: "Doctors", icon: Stethoscope },
+  { id: "appointments", label: "Appointments", icon: CalendarDays },
+  { id: "patients", label: "Patients", icon: Users },
+  { id: "notifications", label: "Notification logs", icon: BellRing, badge: 2 },
+  { id: "integrations", label: "Integrations", icon: Settings2 },
+];
+const chart = [
+  { d: "14 Aug", v: 36 },
+  { d: "15 Aug", v: 42 },
+  { d: "16 Aug", v: 31 },
+  { d: "17 Aug", v: 54 },
+  { d: "18 Aug", v: 48 },
+  { d: "19 Aug", v: 61 },
+  { d: "20 Aug", v: 58 },
+];
+export function AdminPortal() {
+  const [active, setActive] = useState("overview");
+  const [add, setAdd] = useState(false);
+  const [leave, setLeave] = useState<Doctor | null>(null);
+  const [toast, setToast] = useState("");
+  function notify(s: string) {
+    setToast(s);
+    setTimeout(() => setToast(""), 2600);
+  }
+  return (
+    <DashboardShell
+      role="admin"
+      nav={nav}
+      active={active}
+      onNavigate={setActive}
+    >
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-[100] flex items-center gap-2 rounded-2xl bg-ink px-5 py-4 text-xs font-bold text-white shadow-2xl">
+          <CheckCircle2 size={18} className="text-[#71d5be]" />
+          {toast}
+        </div>
+      )}
+      {active === "overview" && (
+        <AdminOverview onNav={setActive} notify={notify} />
+      )}{" "}
+      {active === "doctors" && (
+        <DoctorsView
+          add={() => setAdd(true)}
+          leave={setLeave}
+          notify={notify}
+        />
+      )}{" "}
+      {active === "appointments" && <AdminAppointments notify={notify} />}{" "}
+      {active === "patients" && <AdminPatients />}{" "}
+      {active === "notifications" && <NotificationLogs notify={notify} />}{" "}
+      {active === "integrations" && <Integrations notify={notify} />}{" "}
+      {active === "settings" && <AdminSettings notify={notify} />}{" "}
+      {add && (
+        <AddDoctor
+          close={() => setAdd(false)}
+          done={() => {
+            setAdd(false);
+            notify("Doctor profile created");
+          }}
+        />
+      )}
+      {leave && (
+        <LeaveModal
+          doctor={leave}
+          close={() => setLeave(null)}
+          done={() => {
+            setLeave(null);
+            notify("Leave confirmed and affected patients notified");
+          }}
+        />
+      )}
+    </DashboardShell>
+  );
+}
+function Head({
+  title,
+  copy,
+  action,
+}: {
+  title: string;
+  copy: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className="mb-7 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+      <div>
+        <p className="text-[10px] font-extrabold uppercase tracking-[.15em] text-brand">
+          Clinic operations · Live
+        </p>
+        <h1 className="mt-2 text-3xl font-extrabold tracking-[-.04em]">
+          {title}
+        </h1>
+        <p className="mt-2 text-xs text-muted">{copy}</p>
+      </div>
+      {action}
+    </div>
+  );
+}
+function AdminOverview({
+  onNav,
+  notify,
+}: {
+  onNav: (s: string) => void;
+  notify: (s: string) => void;
+}) {
+  const { doctors } = useApp();
+  return (
+    <div>
+      <Head
+        title="Operations overview"
+        copy="Everything happening across Carely Medical Centre today."
+        action={
+          <button
+            onClick={() =>
+              notify("Email, calendar, AI and reminder services are healthy")
+            }
+            className="flex items-center gap-2 rounded-xl border border-line bg-white px-4 py-3 text-[10px] font-bold"
+          >
+            <span className="size-2 animate-pulse rounded-full bg-emerald-500" />
+            All systems operational
+          </button>
+        }
+      />
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <StatCard
+          label="Appointments today"
+          value="58"
+          detail="12 still upcoming"
+          icon={CalendarCheck}
+          tone="blue"
+          trend="up"
+        />
+        <StatCard
+          label="Active doctors"
+          value={String(doctors.filter((d) => d.active && !d.onLeave).length)}
+          detail={`of ${doctors.length} total doctors`}
+          icon={Stethoscope}
+        />
+        <StatCard
+          label="Patients this month"
+          value="1,248"
+          detail="84 new this week"
+          icon={Users}
+          tone="amber"
+          trend="up"
+        />
+        <StatCard
+          label="Delivery success"
+          value="98.7%"
+          detail="Email & calendar events"
+          icon={Gauge}
+          tone="rose"
+        />
+      </div>
+      <div className="mt-5 grid gap-5 xl:grid-cols-[1.4fr_.6fr]">
+        <section className="card p-5 sm:p-6">
+          <SectionTitle
+            title="Appointment activity"
+            subtitle="Completed bookings over the last 7 days"
+            action={
+              <select className="rounded-lg border border-line px-3 py-2 text-[10px] font-bold">
+                <option>Last 7 days</option>
+              </select>
+            }
+          />
+          <div className="mt-5 h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chart}>
+                <defs>
+                  <linearGradient id="carelyArea" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0" stopColor="#087f6c" stopOpacity={0.28} />
+                    <stop offset="1" stopColor="#087f6c" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid vertical={false} stroke="#edf1f0" />
+                <XAxis
+                  dataKey="d"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fontSize: 9, fill: "#71817e" }}
+                />
+                <YAxis
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fontSize: 9, fill: "#71817e" }}
+                />
+                <Tooltip
+                  contentStyle={{
+                    borderRadius: 12,
+                    border: "1px solid #e5ecea",
+                    fontSize: 11,
+                  }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="v"
+                  stroke="#087f6c"
+                  strokeWidth={2.5}
+                  fill="url(#carelyArea)"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </section>
+        <aside className="card p-5 sm:p-6">
+          <SectionTitle
+            title="Appointment mix"
+            subtitle="Today’s status distribution"
+          />
+          <div className="relative mt-3 h-42">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={[
+                    { n: "Completed", v: 32, c: "#087f6c" },
+                    { n: "Upcoming", v: 18, c: "#599ee6" },
+                    { n: "Cancelled", v: 5, c: "#e9b45a" },
+                    { n: "No-show", v: 3, c: "#df7466" },
+                  ]}
+                  dataKey="v"
+                  innerRadius={48}
+                  outerRadius={68}
+                  paddingAngle={3}
+                >
+                  {["#087f6c", "#599ee6", "#e9b45a", "#df7466"].map((c) => (
+                    <Cell key={c} fill={c} />
+                  ))}
+                </Pie>
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="pointer-events-none absolute inset-0 grid place-items-center">
+              <div className="text-center">
+                <p className="text-xl font-extrabold">58</p>
+                <p className="text-[8px] text-muted">TOTAL</p>
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              ["Completed", "32", "bg-brand"],
+              ["Upcoming", "18", "bg-blue-400"],
+              ["Cancelled", "5", "bg-amber-400"],
+              ["No-show", "3", "bg-red-400"],
+            ].map((x) => (
+              <p
+                className="flex items-center gap-2 text-[9px] text-muted"
+                key={x[0]}
+              >
+                <span className={`size-2 rounded-full ${x[2]}`} />
+                {x[0]} <b className="ml-auto text-ink">{x[1]}</b>
+              </p>
+            ))}
+          </div>
+        </aside>
+      </div>
+      <div className="mt-5 grid gap-5 lg:grid-cols-[1.2fr_.8fr]">
+        <section className="card p-5">
+          <SectionTitle
+            title="Needs attention"
+            subtitle="Operational issues requiring action"
+          />
+          <div className="mt-4 space-y-2">
+            <AlertRow
+              tone="amber"
+              icon={Calendar}
+              title="Leave conflict · Dr. Neha Kapoor"
+              copy="4 appointments affected on 24 August"
+              action="Review"
+              onClick={() => onNav("doctors")}
+            />
+            <AlertRow
+              tone="red"
+              icon={Mail}
+              title="2 email notifications failed"
+              copy="Automatic retry scheduled in 4 minutes"
+              action="View logs"
+              onClick={() => onNav("notifications")}
+            />
+            <AlertRow
+              tone="blue"
+              icon={FileClock}
+              title="3 visit summaries pending"
+              copy="Older than the 24-hour target"
+              action="View"
+              onClick={() => onNav("appointments")}
+            />
+          </div>
+        </section>
+        <section className="card p-5">
+          <SectionTitle
+            title="Live clinic status"
+            subtitle="Current patient flow"
+          />
+          <div className="mt-5 grid grid-cols-3 divide-x divide-line text-center">
+            <div>
+              <p className="text-xl font-extrabold text-blue-600">8</p>
+              <p className="mt-1 text-[9px] text-muted">WAITING</p>
+            </div>
+            <div>
+              <p className="text-xl font-extrabold text-amber-600">5</p>
+              <p className="mt-1 text-[9px] text-muted">IN VISIT</p>
+            </div>
+            <div>
+              <p className="text-xl font-extrabold text-brand">32</p>
+              <p className="mt-1 text-[9px] text-muted">DONE</p>
+            </div>
+          </div>
+          <button
+            onClick={() => onNav("appointments")}
+            className="mt-5 flex w-full items-center justify-between rounded-xl bg-canvas p-3 text-[10px] font-extrabold"
+          >
+            Open live queue <ChevronRight size={14} />
+          </button>
+        </section>
+      </div>
+    </div>
+  );
+}
+function AlertRow({
+  tone,
+  icon: Icon,
+  title,
+  copy,
+  action,
+  onClick,
+}: {
+  tone: string;
+  icon: typeof Calendar;
+  title: string;
+  copy: string;
+  action: string;
+  onClick: () => void;
+}) {
+  const c =
+    tone === "red"
+      ? "bg-red-50 text-red-600"
+      : tone === "amber"
+        ? "bg-amber-50 text-amber-600"
+        : "bg-blue-50 text-blue-600";
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-line p-3">
+      <span className={`grid size-9 place-items-center rounded-xl ${c}`}>
+        <Icon size={17} />
+      </span>
+      <div className="flex-1">
+        <p className="text-[11px] font-extrabold">{title}</p>
+        <p className="mt-1 text-[9px] text-muted">{copy}</p>
+      </div>
+      <button
+        onClick={onClick}
+        className="text-[9px] font-extrabold text-brand"
+      >
+        {action}
+      </button>
+    </div>
+  );
+}
+function DoctorsView({
+  add,
+  leave,
+  notify,
+}: {
+  add: () => void;
+  leave: (d: Doctor) => void;
+  notify: (s: string) => void;
+}) {
+  const { doctors, updateDoctor } = useApp();
+  const [query, setQuery] = useState("");
+  const [specialty, setSpecialty] = useState("all");
+  const [doctorStatus, setDoctorStatus] = useState("all");
+  const shownDoctors = doctors.filter(
+    (d) =>
+      (specialty === "all" || d.specialty === specialty) &&
+      (doctorStatus === "all" ||
+        (doctorStatus === "active"
+          ? d.active && !d.onLeave
+          : doctorStatus === "leave"
+            ? d.onLeave
+            : !d.active)) &&
+      `${d.name} ${d.specialty}`.toLowerCase().includes(query.toLowerCase()),
+  );
+  return (
+    <div>
+      <Head
+        title="Doctors"
+        copy="Create profiles, manage schedules and coordinate time away."
+        action={
+          <button
+            onClick={add}
+            className="rounded-xl bg-brand px-4 py-3 text-xs font-extrabold text-white"
+          >
+            <Plus size={15} className="mr-2 inline" />
+            Add doctor
+          </button>
+        }
+      />
+      <div className="card overflow-hidden">
+        <div className="flex flex-col gap-3 border-b border-line p-5 sm:flex-row">
+          <label className="relative flex-1">
+            <Search
+              size={16}
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted"
+            />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search doctors or specialty"
+              className="w-full rounded-xl bg-canvas py-3 pl-10 text-xs outline-none"
+            />
+          </label>
+          <select
+            value={specialty}
+            onChange={(e) => setSpecialty(e.target.value)}
+            className="rounded-xl border border-line px-4 py-3 text-xs font-bold"
+          >
+            <option value="all">All specialties</option>
+            {[...new Set(doctors.map((d) => d.specialty))].map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+          <select
+            value={doctorStatus}
+            onChange={(e) => setDoctorStatus(e.target.value)}
+            className="rounded-xl border border-line px-4 py-3 text-xs font-bold"
+          >
+            <option value="all">All statuses</option>
+            <option value="active">Active</option>
+            <option value="leave">On leave</option>
+            <option value="inactive">Inactive</option>
+          </select>
+        </div>
+        <div className="divide-y divide-line sm:hidden">
+          {shownDoctors.map((d) => (
+            <div key={d.id} className="p-5">
+              <div className="flex items-start gap-3">
+                <DoctorAvatar doctor={d} />
+                <div className="min-w-0 flex-1">
+                  <p className="font-extrabold">{d.name}</p>
+                  <p className="mt-1 text-xs font-bold text-brand">
+                    {d.specialty}
+                  </p>
+                  <p className="mt-1 text-[10px] text-muted">
+                    {d.credentials} · ₹{d.fee} · 45 min slots
+                  </p>
+                </div>
+                {d.onLeave ? (
+                  <span className="rounded-full bg-amber-50 px-2 py-1 text-[10px] font-extrabold text-amber-700">
+                    Leave
+                  </span>
+                ) : (
+                  <StatusBadge status={d.active ? "active" : "inactive"} />
+                )}
+              </div>
+              <div className="mt-4 flex gap-2">
+                <button
+                  onClick={() => leave(d)}
+                  className="flex-1 rounded-xl border border-line px-3 py-2.5 text-xs font-bold"
+                >
+                  Manage leave
+                </button>
+                <button
+                  onClick={() => {
+                    updateDoctor(d.id, { active: !d.active });
+                    notify(
+                      `${d.name} ${d.active ? "deactivated" : "activated"}`,
+                    );
+                  }}
+                  className="flex-1 rounded-xl bg-brand-soft px-3 py-2.5 text-xs font-extrabold text-brand"
+                >
+                  {d.active ? "Deactivate" : "Activate"}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="hidden overflow-x-auto sm:block">
+          <table className="w-full min-w-[780px] text-left">
+            <thead>
+              <tr className="border-b border-line bg-canvas/50 text-[9px] font-extrabold uppercase tracking-wider text-muted">
+                <th className="px-5 py-3">Doctor</th>
+                <th>Specialty</th>
+                <th>Working hours</th>
+                <th>Slot</th>
+                <th>Status</th>
+                <th className="pr-5 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {shownDoctors.map((d) => (
+                <tr key={d.id} className="text-xs">
+                  <td className="px-5 py-4">
+                    <div className="flex items-center gap-3">
+                      <DoctorAvatar doctor={d} />
+                      <div>
+                        <p className="font-extrabold">{d.name}</p>
+                        <p className="mt-1 text-[9px] text-muted">
+                          {d.credentials} · ₹{d.fee}
+                        </p>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <p className="font-bold">{d.specialty}</p>
+                  </td>
+                  <td>
+                    <p className="text-[10px] font-bold">Mon–Fri</p>
+                    <p className="mt-1 text-[9px] text-muted">
+                      09:00 AM – 05:00 PM
+                    </p>
+                  </td>
+                  <td>
+                    <span className="rounded-lg bg-canvas px-2 py-1 text-[9px] font-bold">
+                      45 min
+                    </span>
+                  </td>
+                  <td>
+                    {d.onLeave ? (
+                      <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[9px] font-extrabold text-amber-700">
+                        On leave
+                      </span>
+                    ) : (
+                      <StatusBadge status={d.active ? "active" : "inactive"} />
+                    )}
+                  </td>
+                  <td className="pr-5 text-right">
+                    <div className="inline-flex items-center gap-2">
+                      <button
+                        onClick={() => leave(d)}
+                        className="rounded-lg border border-line px-3 py-2 text-[9px] font-bold"
+                      >
+                        Manage leave
+                      </button>
+                      <button
+                        onClick={() => {
+                          updateDoctor(d.id, { active: !d.active });
+                          notify(
+                            `${d.name} ${d.active ? "deactivated" : "activated"}`,
+                          );
+                        }}
+                        className="grid size-8 place-items-center rounded-lg border border-line"
+                      >
+                        <MoreHorizontal size={15} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+function AdminAppointments({ notify }: { notify: (s: string) => void }) {
+  const { appointments, doctors, updateAppointment } = useApp();
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("all");
+  const [date, setDate] = useState("");
+  const filteredAppointments = appointments.filter(
+    (a) =>
+      (status === "all" || a.status === status) &&
+      (!date || a.date === date) &&
+      `${a.id} ${a.patientName}`.toLowerCase().includes(query.toLowerCase()),
+  );
+  return (
+    <div>
+      <Head
+        title="Appointments"
+        copy="Monitor visits, booking statuses and sync health across the clinic."
+      />
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard
+          label="Today"
+          value="58"
+          detail="Across 6 doctors"
+          icon={CalendarDays}
+        />
+        <StatCard
+          label="Upcoming"
+          value="18"
+          detail="Next 24 hours"
+          icon={Clock3}
+          tone="blue"
+        />
+        <StatCard
+          label="Completed"
+          value="32"
+          detail="55% of today"
+          icon={CheckCircle2}
+        />
+        <StatCard
+          label="Cancelled"
+          value="5"
+          detail="8.6% cancellation rate"
+          icon={X}
+          tone="rose"
+        />
+      </div>
+      <div className="mt-5 card overflow-hidden">
+        <div className="flex flex-col gap-3 border-b border-line p-5 sm:flex-row">
+          <label className="relative flex-1">
+            <Search
+              size={16}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted"
+            />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="w-full rounded-xl bg-canvas py-3 pl-9 text-xs"
+              placeholder="Search appointment ID or patient"
+            />
+          </label>
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="rounded-xl border border-line px-4 text-xs font-bold"
+          />
+          <select
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+            className="rounded-xl border border-line px-4 text-xs font-bold"
+          >
+            <option value="all">All statuses</option>
+            <option value="upcoming">Upcoming</option>
+            <option value="completed">Completed</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+        </div>
+        <div className="divide-y divide-line">
+          {filteredAppointments.map((a) => {
+            const d = doctors.find((x) => x.id === a.doctorId)!;
+            return (
+              <div className="flex flex-wrap items-center gap-4 p-5" key={a.id}>
+                <div className="w-18">
+                  <p className="text-xs font-extrabold">{a.time}</p>
+                  <p className="mt-1 text-[9px] text-muted">{a.id}</p>
+                </div>
+                <span className="grid size-10 place-items-center rounded-xl bg-blue-50 text-[10px] font-extrabold text-blue-600">
+                  {a.patientName
+                    .split(" ")
+                    .map((x) => x[0])
+                    .join("")}
+                </span>
+                <div className="min-w-40 flex-1">
+                  <p className="text-xs font-extrabold">{a.patientName}</p>
+                  <p className="mt-1 text-[9px] text-muted">
+                    with {d.name} · {a.type}
+                  </p>
+                </div>
+                <StatusBadge status={a.status} />
+                <div className="flex gap-2">
+                  <span
+                    title="Calendar status"
+                    className={`grid size-8 place-items-center rounded-lg ${a.calendarSynced ? "bg-emerald-50" : "bg-red-50 grayscale"}`}
+                  >
+                    <GoogleCalendarLogo size={16} />
+                  </span>
+                  <span
+                    title="Email status"
+                    className={`grid size-8 place-items-center rounded-lg ${a.emailSent ? "bg-emerald-50" : "bg-red-50 grayscale"}`}
+                  >
+                    <GmailLogo size={16} />
+                  </span>
+                </div>
+                <button
+                  onClick={() => {
+                    const next =
+                      a.status === "upcoming" ? "completed" : "upcoming";
+                    updateAppointment(a.id, { status: next });
+                    notify(`${a.id} marked ${next}`);
+                  }}
+                  title="Toggle appointment status"
+                  className="grid size-8 place-items-center rounded-lg border border-line"
+                >
+                  {a.status === "upcoming" ? (
+                    <Check size={16} className="text-brand" />
+                  ) : (
+                    <RefreshCcw size={14} className="text-muted" />
+                  )}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+function AdminPatients() {
+  return (
+    <div>
+      <Head
+        title="Patients"
+        copy="A privacy-conscious view of patients using your clinic."
+      />
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard
+          label="Total patients"
+          value="1,248"
+          detail="Across all care teams"
+          icon={Users}
+        />
+        <StatCard
+          label="New this month"
+          value="84"
+          detail="12% growth"
+          icon={UserRound}
+          tone="blue"
+          trend="up"
+        />
+        <StatCard
+          label="Returning"
+          value="73%"
+          detail="Last 90 days"
+          icon={RefreshCcw}
+          tone="amber"
+        />
+        <StatCard
+          label="Care satisfaction"
+          value="4.8"
+          detail="From 892 responses"
+          icon={Activity}
+        />
+      </div>
+      <div className="mt-5 card p-6">
+        <SectionTitle
+          title="Patient growth"
+          subtitle="New registrations over six months"
+        />
+        <div className="mt-5 h-72">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart
+              data={[
+                { m: "Mar", v: 48 },
+                { m: "Apr", v: 58 },
+                { m: "May", v: 51 },
+                { m: "Jun", v: 72 },
+                { m: "Jul", v: 78 },
+                { m: "Aug", v: 84 },
+              ]}
+            >
+              <CartesianGrid vertical={false} stroke="#edf1f0" />
+              <XAxis
+                dataKey="m"
+                axisLine={false}
+                tickLine={false}
+                tick={{ fontSize: 9 }}
+              />
+              <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9 }} />
+              <Tooltip />
+              <Bar dataKey="v" fill="#087f6c" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    </div>
+  );
+}
+function NotificationLogs({ notify }: { notify: (s: string) => void }) {
+  const [failed, setFailed] = useState(2);
+  const logs = [
+    {
+      type: "Booking confirmation",
+      to: "Aarav Sharma",
+      channel: "Email + Calendar",
+      time: "10:42 AM",
+      status: "Delivered",
+    },
+    {
+      type: "Medication reminder",
+      to: "Riya Nair",
+      channel: "Email",
+      time: "09:30 AM",
+      status: "Delivered",
+    },
+    {
+      type: "Appointment reminder",
+      to: "Rohan Das",
+      channel: "Email",
+      time: "09:05 AM",
+      status: failed ? "Failed" : "Delivered",
+    },
+    {
+      type: "Calendar update",
+      to: "Dr. Neha Kapoor",
+      channel: "Google Calendar",
+      time: "08:58 AM",
+      status: failed ? "Failed" : "Delivered",
+    },
+  ];
+  return (
+    <div>
+      <Head
+        title="Notification logs"
+        copy="Monitor reliable delivery across email, reminders and calendars."
+        action={
+          <button
+            onClick={() => {
+              setFailed(0);
+              notify("Failed notifications retried successfully");
+            }}
+            disabled={!failed}
+            className="rounded-xl bg-brand px-4 py-3 text-xs font-extrabold text-white disabled:opacity-40"
+          >
+            <RefreshCcw size={15} className="mr-2 inline" />
+            Retry failed ({failed})
+          </button>
+        }
+      />
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard
+          label="Sent today"
+          value="284"
+          detail="Email & calendar events"
+          icon={Mail}
+        />
+        <StatCard
+          label="Delivered"
+          value={failed ? "280" : "282"}
+          detail="98.7% success rate"
+          icon={CheckCircle2}
+          tone="blue"
+        />
+        <StatCard
+          label="Failed"
+          value={String(failed)}
+          detail={failed ? "Queued for retry" : "All cleared"}
+          icon={AlertTriangle}
+          tone="rose"
+        />
+        <StatCard
+          label="Avg. delivery"
+          value="1.2s"
+          detail="Within target"
+          icon={Activity}
+          tone="amber"
+        />
+      </div>
+      <div className="mt-5 card overflow-hidden">
+        <div className="flex items-center justify-between border-b border-line p-5">
+          <p className="text-sm font-extrabold">Delivery activity</p>
+          <span className="flex items-center gap-2 text-[9px] font-bold text-emerald-700">
+            <span className="size-2 rounded-full bg-emerald-500" />
+            Worker healthy
+          </span>
+        </div>
+        <div className="divide-y divide-line">
+          {logs.map((l) => (
+            <div
+              className="flex flex-wrap items-center gap-4 p-5"
+              key={l.type + l.to}
+            >
+              <span
+                className={`grid size-10 place-items-center rounded-xl ${l.status === "Failed" ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-600"}`}
+              >
+                {l.channel.includes("Calendar") ? (
+                  <Calendar size={18} />
+                ) : (
+                  <Mail size={18} />
+                )}
+              </span>
+              <div className="min-w-40 flex-1">
+                <p className="text-xs font-extrabold">{l.type}</p>
+                <p className="mt-1 text-[9px] text-muted">
+                  To {l.to} · {l.channel}
+                </p>
+              </div>
+              <p className="text-[9px] font-bold text-muted">{l.time}</p>
+              <span
+                className={`rounded-full px-2.5 py-1 text-[9px] font-extrabold ${l.status === "Failed" ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}
+              >
+                {l.status}
+              </span>
+              {l.status === "Failed" && (
+                <button
+                  onClick={() => {
+                    setFailed(Math.max(0, failed - 1));
+                    notify("Notification delivered on retry");
+                  }}
+                  className="text-[9px] font-extrabold text-brand"
+                >
+                  Retry
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="mt-5 rounded-2xl bg-blue-50 p-5">
+        <div className="flex gap-3">
+          <ShieldCheck className="shrink-0 text-blue-600" size={19} />
+          <div>
+            <p className="text-xs font-extrabold text-blue-900">
+              Reliable by design
+            </p>
+            <p className="mt-1 text-[10px] leading-5 text-blue-700">
+              Failed messages use exponential retry. Delivery issues never block
+              appointment creation or patient care workflows.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+function Integrations({ notify }: { notify: (s: string) => void }) {
+  const [calendar, setCalendar] = useState(true);
+  const [mail, setMail] = useState(true);
+  return (
+    <div>
+      <Head
+        title="Integrations"
+        copy="Connect the services that keep patients and doctors informed."
+      />
+      <div className="grid gap-5 md:grid-cols-2">
+        <IntegrationCard
+          logo={<GoogleCalendarLogo size={35} />}
+          name="Google Calendar"
+          detail="Creates and updates events for patients and doctors through OAuth 2.0."
+          enabled={calendar}
+          toggle={() => {
+            setCalendar(!calendar);
+            notify(
+              `Google Calendar ${calendar ? "disconnected" : "connected"}`,
+            );
+          }}
+          stats="342 events synced this month"
+          onLogs={() =>
+            notify("Google Calendar sync log: 342 successful, 0 pending")
+          }
+        />
+        <IntegrationCard
+          logo={<GmailLogo size={35} />}
+          name="Email notifications"
+          detail="Booking confirmations, reminders, cancellations and care summaries."
+          enabled={mail}
+          toggle={() => {
+            setMail(!mail);
+            notify(`Email service ${mail ? "paused" : "connected"}`);
+          }}
+          stats="1,824 emails delivered this month"
+          onLogs={() => notify("Email delivery log opened: 98.7% delivered")}
+        />
+        <IntegrationCard
+          logo={
+            <span className="grid size-9 place-items-center rounded-xl bg-[#efe9ff] text-lg font-extrabold text-[#6a49bd]">
+              AI
+            </span>
+          }
+          name="Carely Assist"
+          detail="Pre-visit symptom briefs and patient-friendly post-visit summaries."
+          enabled
+          toggle={() => notify("Carely Assist health check passed")}
+          stats="99.4% generation success"
+          onLogs={() =>
+            notify("Carely Assist log: last summary generated 4 minutes ago")
+          }
+        />
+        <IntegrationCard
+          logo={
+            <span className="grid size-9 place-items-center rounded-xl bg-[#e7f8f3] text-brand">
+              <BellRing size={20} />
+            </span>
+          }
+          name="Reminder worker"
+          detail="Background medication reminders and automatic delivery retries."
+          enabled
+          toggle={() => notify("Reminder worker is healthy")}
+          stats="Next job in 2 minutes"
+          onLogs={() => notify("Reminder worker log: queue is healthy")}
+        />
+      </div>
+    </div>
+  );
+}
+function IntegrationCard({
+  logo,
+  name,
+  detail,
+  enabled,
+  toggle,
+  stats,
+  onLogs,
+}: {
+  logo: React.ReactNode;
+  name: string;
+  detail: string;
+  enabled: boolean;
+  toggle: () => void;
+  stats: string;
+  onLogs: () => void;
+}) {
+  return (
+    <div className="card p-6">
+      <div className="flex items-start justify-between">
+        <span className="grid size-14 place-items-center rounded-2xl bg-canvas">
+          {logo}
+        </span>
+        <StatusBadge status={enabled ? "active" : "inactive"} />
+      </div>
+      <h2 className="mt-6 text-lg font-extrabold">{name}</h2>
+      <p className="mt-2 min-h-12 text-xs leading-6 text-muted">{detail}</p>
+      <div className="mt-5 rounded-xl bg-canvas p-3 text-[10px] font-bold text-muted">
+        {stats}
+      </div>
+      <div className="mt-5 flex gap-2">
+        <button
+          onClick={toggle}
+          className={`rounded-xl px-4 py-2.5 text-[10px] font-extrabold ${enabled ? "border border-line" : "bg-brand text-white"}`}
+        >
+          {enabled ? "Manage connection" : "Connect"}
+        </button>
+        <button
+          onClick={onLogs}
+          className="rounded-xl border border-line px-4 py-2.5 text-[10px] font-bold"
+        >
+          View logs
+        </button>
+      </div>
+    </div>
+  );
+}
+function AdminSettings({ notify }: { notify: (s: string) => void }) {
+  return (
+    <div>
+      <Head
+        title="Settings"
+        copy="Configure clinic information and operational defaults."
+      />
+      <section className="card max-w-3xl p-6">
+        <h2 className="text-lg font-extrabold">Clinic profile</h2>
+        <div className="mt-6 grid gap-4 sm:grid-cols-2">
+          <label className="text-xs font-extrabold">
+            Clinic name
+            <input
+              defaultValue="Carely Medical Centre"
+              className="mt-2 w-full rounded-xl border border-line p-3 font-normal"
+            />
+          </label>
+          <label className="text-xs font-extrabold">
+            Timezone
+            <select className="mt-2 w-full rounded-xl border border-line p-3 font-normal">
+              <option>Asia/Kolkata (IST)</option>
+            </select>
+          </label>
+          <label className="text-xs font-extrabold">
+            Default slot duration
+            <select className="mt-2 w-full rounded-xl border border-line p-3 font-normal">
+              <option>45 minutes</option>
+            </select>
+          </label>
+          <label className="text-xs font-extrabold">
+            Slot hold time
+            <select className="mt-2 w-full rounded-xl border border-line p-3 font-normal">
+              <option>5 minutes</option>
+            </select>
+          </label>
+        </div>
+        <button
+          onClick={() => notify("Clinic settings saved")}
+          className="mt-6 rounded-xl bg-brand px-5 py-3 text-xs font-extrabold text-white"
+        >
+          Save settings
+        </button>
+      </section>
+    </div>
+  );
+}
+function AddDoctor({ close, done }: { close: () => void; done: () => void }) {
+  const { addDoctor } = useApp();
+  const [name, setName] = useState("");
+  const [specialty, setSpecialty] = useState("General Medicine");
+  function save(e: React.FormEvent) {
+    e.preventDefault();
+    addDoctor({
+      id: `d${Date.now()}`,
+      name: `Dr. ${name}`,
+      specialty,
+      credentials: "MBBS, MD",
+      experience: 5,
+      rating: 5,
+      reviews: 0,
+      fee: 600,
+      color: "#DCEFE9",
+      initials: name
+        .split(" ")
+        .map((x) => x[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase(),
+      about: "New Carely specialist profile.",
+      languages: ["English", "Hindi"],
+      nextAvailable: "Schedule pending",
+      active: true,
+    });
+    done();
+  }
+  return (
+    <div className="fixed inset-0 z-[90] grid place-items-center bg-ink/40 p-4 backdrop-blur-sm">
+      <form
+        onSubmit={save}
+        className="w-full max-w-lg rounded-[24px] bg-white p-6 shadow-2xl"
+      >
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-[10px] font-extrabold uppercase tracking-wider text-brand">
+              New care provider
+            </p>
+            <h2 className="mt-2 text-xl font-extrabold">
+              Create doctor profile
+            </h2>
+          </div>
+          <button
+            aria-label="Close doctor form"
+            type="button"
+            onClick={close}
+            className="grid size-9 place-items-center rounded-xl bg-canvas"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <div className="mt-6 grid gap-4 sm:grid-cols-2">
+          <label className="text-xs font-extrabold sm:col-span-2">
+            Doctor name
+            <input
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Kavya Menon"
+              className="mt-2 w-full rounded-xl border border-line p-3.5 font-normal"
+            />
+          </label>
+          <label className="text-xs font-extrabold">
+            Specialty
+            <select
+              value={specialty}
+              onChange={(e) => setSpecialty(e.target.value)}
+              className="mt-2 w-full rounded-xl border border-line p-3.5 font-normal"
+            >
+              <option>General Medicine</option>
+              <option>Cardiology</option>
+              <option>Dermatology</option>
+              <option>Pediatrics</option>
+            </select>
+          </label>
+          <label className="text-xs font-extrabold">
+            Consultation fee
+            <input
+              type="number"
+              defaultValue="600"
+              className="mt-2 w-full rounded-xl border border-line p-3.5 font-normal"
+            />
+          </label>
+          <label className="text-xs font-extrabold">
+            Working from
+            <input
+              type="time"
+              defaultValue="09:00"
+              className="mt-2 w-full rounded-xl border border-line p-3.5 font-normal"
+            />
+          </label>
+          <label className="text-xs font-extrabold">
+            Slot duration
+            <select className="mt-2 w-full rounded-xl border border-line p-3.5 font-normal">
+              <option>45 minutes</option>
+              <option>30 minutes</option>
+            </select>
+          </label>
+        </div>
+        <div className="mt-6 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={close}
+            className="rounded-xl border border-line px-5 py-3 text-xs font-bold"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            className="rounded-xl bg-brand px-5 py-3 text-xs font-extrabold text-white"
+          >
+            Create profile
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+function LeaveModal({
+  doctor,
+  close,
+  done,
+}: {
+  doctor: Doctor;
+  close: () => void;
+  done: () => void;
+}) {
+  const { updateDoctor } = useApp();
+  const [ack, setAck] = useState(false);
+  return (
+    <div className="fixed inset-0 z-[90] grid place-items-center bg-ink/40 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-lg rounded-[24px] bg-white p-6 shadow-2xl">
+        <div className="flex justify-between">
+          <div>
+            <p className="text-[10px] font-extrabold uppercase tracking-wider text-amber-700">
+              Leave conflict detected
+            </p>
+            <h2 className="mt-2 text-xl font-extrabold">
+              Confirm leave for {doctor.name}
+            </h2>
+          </div>
+          <button aria-label="Close leave dialog" onClick={close}>
+            <X size={18} />
+          </button>
+        </div>
+        <div className="mt-5 rounded-xl bg-amber-50 p-4">
+          <div className="flex gap-3">
+            <AlertTriangle size={19} className="shrink-0 text-amber-700" />
+            <div>
+              <p className="text-xs font-extrabold text-amber-900">
+                4 existing appointments are affected
+              </p>
+              <p className="mt-1 text-[10px] leading-5 text-amber-800">
+                Patients on 24 August will need another doctor or a new time.
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="mt-5 space-y-2">
+          {[
+            "Aarav Sharma · 09:00 AM",
+            "Riya Nair · 10:30 AM",
+            "Varun Kumar · 12:00 PM",
+            "Sara Das · 03:00 PM",
+          ].map((x) => (
+            <div
+              key={x}
+              className="flex items-center gap-3 rounded-xl border border-line p-3 text-[10px] font-bold"
+            >
+              <span className="size-2 rounded-full bg-amber-400" />
+              {x}
+              <span className="ml-auto text-muted">Needs action</span>
+            </div>
+          ))}
+        </div>
+        <label className="mt-5 flex gap-3 rounded-xl bg-canvas p-4 text-[10px] leading-5 text-muted">
+          <input
+            checked={ack}
+            onChange={(e) => setAck(e.target.checked)}
+            type="checkbox"
+            className="mt-1 accent-brand"
+          />
+          Notify all affected patients by email and offer the next available
+          slot.
+        </label>
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            onClick={close}
+            className="rounded-xl border border-line px-5 py-3 text-xs font-bold"
+          >
+            Go back
+          </button>
+          <button
+            disabled={!ack}
+            onClick={() => {
+              updateDoctor(doctor.id, { onLeave: true });
+              done();
+            }}
+            className="rounded-xl bg-amber-600 px-5 py-3 text-xs font-extrabold text-white disabled:opacity-40"
+          >
+            Confirm leave & notify
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
