@@ -1,6 +1,8 @@
 @import "tailwindcss";
 
 :root {
+  --font-manrope: "Manrope", Arial, sans-serif;
+  --font-newsreader: Georgia, "Times New Roman", serif;
   --ink: #16302c;
   --muted: #71817e;
   --line: #e5ecea;

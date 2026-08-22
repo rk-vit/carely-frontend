@@ -52,9 +52,9 @@ export function DashboardShell({
     onNavigate(id);
     setMobile(false);
   }
-  function signout() {
-    logout();
-    router.push(`/${role}/login`);
+  async function signout() {
+    await logout();
+    router.replace(`/${role}/login`);
   }
   return (
     <div className="min-h-screen bg-canvas">

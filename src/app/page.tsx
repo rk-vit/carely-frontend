@@ -46,8 +46,8 @@ export default function Home() {
               href="/patient/register"
               className="rounded-xl bg-brand px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-brand/20 hover:bg-brand-dark"
             >
-              <span className="sm:hidden">Sign up</span>
-              <span className="hidden sm:inline">Get started</span>
+              <span className="sm:hidden">Register</span>
+              <span className="hidden sm:inline">Register</span>
             </Link>
           </div>
         </div>
@@ -75,7 +75,7 @@ export default function Home() {
                 href="/patient/register"
                 className="group inline-flex items-center justify-center gap-2 rounded-2xl bg-brand px-6 py-4 font-extrabold text-white shadow-xl shadow-brand/20 hover:-translate-y-0.5 hover:bg-brand-dark"
               >
-                Find a doctor{" "}
+                Create your account{" "}
                 <ArrowRight
                   className="transition group-hover:translate-x-1"
                   size={18}

@@ -1,13 +1,6 @@
 import type { Metadata } from "next";
-import { Manrope, Newsreader } from "next/font/google";
 import "./globals.css";
 import { AppProvider } from "@/lib/app-context";
-
-const manrope = Manrope({ variable: "--font-manrope", subsets: ["latin"] });
-const newsreader = Newsreader({
-  variable: "--font-newsreader",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: {
@@ -24,7 +17,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${manrope.variable} ${newsreader.variable}`}>
+    <html lang="en">
       <body>
         <AppProvider>{children}</AppProvider>
       </body>

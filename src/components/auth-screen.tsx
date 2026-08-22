@@ -25,7 +25,7 @@ const copy = {
     eyebrow: "Your health, in your hands",
     title: "Welcome back",
     subtitle: "Your care team is just a few clicks away.",
-    email: "aarav@demo.com",
+    email: "",
     icon: UserRound,
     quote:
       "Carely makes it so easy to understand what happens next. I finally feel in control of my care.",
@@ -36,7 +36,7 @@ const copy = {
     eyebrow: "Your practice, beautifully organized",
     title: "Doctor sign in",
     subtitle: "Your patients and schedule are ready for you.",
-    email: "maya@carely.com",
+    email: "",
     icon: Stethoscope,
     quote:
       "The pre-visit briefs help me arrive prepared and give each patient more meaningful time.",
@@ -47,7 +47,7 @@ const copy = {
     eyebrow: "One calm view of every operation",
     title: "Admin portal",
     subtitle: "Secure access for authorized clinic teams.",
-    email: "admin@carely.com",
+    email: "",
     icon: ShieldCheck,
     quote:
       "From staffing to notifications, our team can see what needs attention before it becomes a problem.",
@@ -62,21 +62,30 @@ export function AuthScreen({ role }: { role: Role }) {
   const c = copy[role];
   const Icon = c.icon;
   const [email, setEmail] = useState(c.email);
-  const [password, setPassword] = useState("demo1234");
+  const [password, setPassword] = useState("");
   const [show, setShow] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  function authenticate() {
+  const [submitting, setSubmitting] = useState(false);
+  async function authenticate() {
     setError("");
-    if (!email.includes("@") || password.length < 6) {
-      setError("Enter a valid email and a password of at least 6 characters.");
+    if (!email.includes("@") || password.length < 8) {
+      setError("Enter a valid email and a password of at least 8 characters.");
       return false;
     }
-    login(role);
-    return true;
+    setSubmitting(true);
+    try {
+      await login(email, password, role);
+      return true;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unable to sign in.");
+      return false;
+    } finally {
+      setSubmitting(false);
+    }
   }
-  function submit() {
-    if (authenticate()) router.push(`/${role}`);
+  async function submit() {
+    if (await authenticate()) router.push(`/${role}`);
   }
   return (
     <main className="grid min-h-screen bg-white lg:grid-cols-[.92fr_1.08fr]">
@@ -165,20 +174,18 @@ export function AuthScreen({ role }: { role: Role }) {
                 {error}
               </p>
             )}
-            <Link
-              href={`/${role}`}
-              onClick={(event) => {
-                if (!authenticate()) event.preventDefault();
-              }}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand px-5 py-4 text-sm font-extrabold text-white shadow-lg shadow-brand/20 hover:bg-brand-dark"
+            <button
+              type="button"
+              disabled={submitting}
+              onClick={submit}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand px-5 py-4 text-sm font-extrabold text-white shadow-lg shadow-brand/20 hover:bg-brand-dark disabled:cursor-wait disabled:opacity-60"
             >
-              Sign in securely
+              {submitting ? "Signing in…" : "Sign in securely"}
               <ArrowRight size={17} />
-            </Link>
+            </button>
           </div>
           <div className="mt-6 rounded-xl border border-dashed border-brand/25 bg-brand-soft/50 px-4 py-3 text-xs text-muted">
-            <b className="text-ink">Demo access:</b> credentials are pre-filled.
-            Simply select “Sign in securely”.
+            Sign in with the email and password used when you registered.
           </div>
           {role === "patient" && (
             <p className="mt-7 text-center text-sm text-muted">

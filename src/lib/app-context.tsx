@@ -1,5 +1,4 @@
 "use client";
-/* eslint-disable react-hooks/set-state-in-effect */
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { Appointment, Doctor, Notice, Role } from "./types";
 import {
@@ -7,14 +6,16 @@ import {
   initialAppointments,
   initialNotices,
 } from "./mock-data";
+import { backendRoleToFrontendRole, checkSession, loginRequest, logoutRequest } from "./auth";
 
 interface AppState {
   doctors: Doctor[];
   appointments: Appointment[];
   notices: Notice[];
   role: Role | null;
-  login: (role: Role) => void;
-  logout: () => void;
+  login: (email: string, password: string, expectedRole: Role) => Promise<void>;
+  authStatus: "loading" | "authenticated" | "unauthenticated";
+  logout: () => Promise<void>;
   addAppointment: (data: Omit<Appointment, "id">) => string;
   updateAppointment: (id: string, patch: Partial<Appointment>) => void;
   updateDoctor: (id: string, patch: Partial<Doctor>) => void;
@@ -30,25 +31,37 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [appointments, setAppointments] = useState(initialAppointments);
   const [notices, setNotices] = useState(initialNotices);
   const [role, setRole] = useState<Role | null>(null);
+  const [authStatus, setAuthStatus] = useState<"loading" | "authenticated" | "unauthenticated">("loading");
   const [ready, setReady] = useState(false);
   // Hydrate the demo session once on the client; this mirrors the future API bootstrap.
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE);
-      if (raw) {
-        const v = JSON.parse(raw);
-        setDoctors(v.doctors || seedDoctors);
-        setAppointments(
-          (v.appointments || initialAppointments).map((a: Appointment) => ({
-            ...a,
-            type: "In-person visit" as const,
-          })),
-        );
-        setNotices(v.notices || initialNotices);
-        setRole(v.role || null);
+    async function hydrate() {
+      try {
+        const raw = localStorage.getItem(STORAGE);
+        if (raw) {
+          const v = JSON.parse(raw);
+          setDoctors(v.doctors || seedDoctors);
+          setAppointments(
+            (v.appointments || initialAppointments).map((a: Appointment) => ({
+              ...a,
+              type: "In-person visit" as const,
+            })),
+          );
+          setNotices(v.notices || initialNotices);
+          const storedRole = v.role || null;
+          setRole(storedRole);
+          const valid = storedRole ? await checkSession().catch(() => false) : false;
+          setAuthStatus(valid && storedRole ? "authenticated" : "unauthenticated");
+        } else {
+          setAuthStatus("unauthenticated");
+        }
+      } catch {
+        setAuthStatus("unauthenticated");
+      } finally {
+        setReady(true);
       }
-    } catch {}
-    setReady(true);
+    }
+    void hydrate();
   }, []);
   useEffect(() => {
     if (ready)
@@ -63,8 +76,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       appointments,
       notices,
       role,
-      login: setRole,
-      logout: () => setRole(null),
+      authStatus,
+      login: async (email, password, expectedRole) => {
+        const response = await loginRequest(email, password);
+        const authenticatedRole = backendRoleToFrontendRole(response.role);
+        if (!authenticatedRole || authenticatedRole !== expectedRole) {
+          await logoutRequest().catch(() => undefined);
+          throw new Error("This account does not have access to this portal.");
+        }
+        setRole(authenticatedRole);
+        setAuthStatus("authenticated");
+      },
+      logout: async () => {
+        await logoutRequest().catch(() => undefined);
+        setRole(null);
+        setAuthStatus("unauthenticated");
+      },
       addAppointment: (data) => {
         const id = `APT-${Math.floor(3000 + Math.random() * 6000)}`;
         setAppointments((p) => [{ ...data, id }, ...p]);
@@ -95,10 +122,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setAppointments(initialAppointments);
         setNotices(initialNotices);
         setRole(null);
+        setAuthStatus("unauthenticated");
         localStorage.removeItem(STORAGE);
       },
     }),
-    [doctors, appointments, notices, role],
+    [doctors, appointments, notices, role, authStatus],
   );
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
