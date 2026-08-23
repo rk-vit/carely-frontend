@@ -15,6 +15,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { Logo } from "@/components/brand";
+import { apiUrl } from "@/lib/api";
 
 type ConnectionResult = {
   ok: boolean;
@@ -43,13 +44,31 @@ export default function ConnectionCheckPage() {
     setLoading(true);
     setResult(null);
     try {
-      const response = await fetch("/api/connection-check", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
+      const startedAt = performance.now();
+      const response = await fetch(apiUrl("/fe-connection-check"), {
+        method: "GET",
+        headers: {
+          Accept: "text/plain, application/json",
+          Authorization: `Basic ${btoa(`${username.trim()}:${password}`)}`,
+        },
+        credentials: "include",
+        cache: "no-store",
+        redirect: "manual",
       });
-      const data = (await response.json()) as ConnectionResult;
-      setResult(data);
+      const responseText = await response.text();
+      const durationMs = Math.round(performance.now() - startedAt);
+      setResult({
+        ok: response.ok,
+        message: response.ok
+          ? responseText || "Connection successful"
+          : response.status === 401
+            ? "The backend rejected these credentials."
+            : response.status >= 300 && response.status < 400
+              ? "The backend redirected to its sign-in page. Check the Basic Auth credentials."
+              : `The backend returned ${response.status} ${response.statusText}.`,
+        status: response.status,
+        durationMs,
+      });
     } catch {
       setResult({
         ok: false,
@@ -106,7 +125,7 @@ export default function ConnectionCheckPage() {
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-bold text-muted">Request</p>
                 <p className="mt-0.5 break-all font-mono text-sm font-extrabold text-ink">
-                  GET localhost:8080/fe-connection-check
+                  GET {process.env.CARELY_API_BASE_URL || "http://localhost:8080"}/fe-connection-check
                 </p>
               </div>
               <span className="w-fit rounded-full bg-blue-50 px-3 py-1.5 text-xs font-extrabold text-blue-700">

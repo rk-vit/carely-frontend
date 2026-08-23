@@ -11,6 +11,8 @@ pnpm run dev
 
 Open [http://localhost:3000](http://localhost:3000). The exact same UI can be built for deployment with `pnpm build` and started with `pnpm start`.
 
+Set `CARELY_API_BASE_URL` to the backend's URL in Vercel (and in `.env.local` for local backend integration). Browser requests, including the connection check, call the backend directly. No `NEXT_PUBLIC_*` backend variable is required.
+
 ## Demo portals
 
 All credentials are pre-filled on the role login screens. Any valid email and a password with at least six characters will work.
