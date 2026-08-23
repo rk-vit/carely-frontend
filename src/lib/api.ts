@@ -50,6 +50,96 @@ export async function updateDoctorProfileRequest(payload: Record<string, unknown
   return body as DoctorProfile;
 }
 
+export type DayOfWeek = "MONDAY" | "TUESDAY" | "WEDNESDAY" | "THURSDAY" | "FRIDAY" | "SATURDAY" | "SUNDAY";
+export type AvailabilityOverrideType = "BLOCKED" | "EXTRA";
+
+export interface AvailabilityApi {
+  id: string;
+  doctorId: string;
+  dayOfWeek: DayOfWeek;
+  startTime: string;
+  endTime: string;
+  timezone: string;
+}
+
+export interface AvailabilityOverrideApi {
+  id: string;
+  doctorId: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  type: AvailabilityOverrideType;
+  reason: string | null;
+}
+
+export interface SlotApi {
+  startAt: string;
+  endAt: string;
+  status: "AVAILABLE" | "BLOCKED";
+}
+
+async function readApiError(response: Response, fallback: string) {
+  const body = await response.json().catch(() => null);
+  return body?.detail || body?.message || fallback;
+}
+
+export async function getDoctorAvailabilityRequest() {
+  const response = await fetch(apiUrl("/doctor/availability"), { credentials: "include", cache: "no-store" });
+  if (!response.ok) throw new Error(await readApiError(response, "Unable to load your availability."));
+  return (await response.json()) as AvailabilityApi[];
+}
+
+export async function saveDoctorAvailabilityRequest(day: DayOfWeek, payload: { startTime: string; endTime: string; timezone: string }) {
+  const response = await fetch(apiUrl(`/doctor/availability/${day}`), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error(await readApiError(response, "Unable to save availability."));
+  return (await response.json()) as AvailabilityApi;
+}
+
+export async function deleteDoctorAvailabilityRequest(day: DayOfWeek) {
+  const response = await fetch(apiUrl(`/doctor/availability/${day}`), { method: "DELETE", credentials: "include" });
+  if (!response.ok) throw new Error(await readApiError(response, "Unable to remove availability."));
+}
+
+export async function getDoctorAvailabilityOverridesRequest(date?: string) {
+  const query = date ? `?date=${encodeURIComponent(date)}` : "";
+  const response = await fetch(apiUrl(`/doctor/availability-overrides${query}`), { credentials: "include", cache: "no-store" });
+  if (!response.ok) throw new Error(await readApiError(response, "Unable to load availability overrides."));
+  return (await response.json()) as AvailabilityOverrideApi[];
+}
+
+export async function createDoctorAvailabilityOverrideRequest(payload: {
+  date: string;
+  startTime: string;
+  endTime: string;
+  type: AvailabilityOverrideType;
+  reason?: string;
+}) {
+  const response = await fetch(apiUrl("/doctor/availability-overrides"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error(await readApiError(response, "Unable to create availability override."));
+  return (await response.json()) as AvailabilityOverrideApi;
+}
+
+export async function deleteDoctorAvailabilityOverrideRequest(id: string) {
+  const response = await fetch(apiUrl(`/doctor/availability-overrides/${id}`), { method: "DELETE", credentials: "include" });
+  if (!response.ok) throw new Error(await readApiError(response, "Unable to delete availability override."));
+}
+
+export async function getDoctorSlotsRequest(doctorId: string, date: string) {
+  const response = await fetch(apiUrl(`/doctors/${doctorId}/slots?date=${encodeURIComponent(date)}`), { credentials: "include", cache: "no-store" });
+  if (!response.ok) throw new Error(await readApiError(response, "Unable to load slots."));
+  return (await response.json()) as SlotApi[];
+}
+
 export interface LeaveRequestApi {
   id: string;
   doctorId: string;

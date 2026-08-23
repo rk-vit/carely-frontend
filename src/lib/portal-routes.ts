@@ -2,7 +2,7 @@ import { Role } from "./types";
 
 export const portalSections = {
   patient: ["overview", "doctors", "appointments", "records", "medications", "settings"],
-  doctor: ["overview", "schedule", "patients", "summaries", "availability", "settings"],
+  doctor: ["overview", "schedule", "slots", "patients", "summaries", "availability", "settings"],
   admin: ["overview", "doctors", "leave-requests", "appointments", "patients", "notifications", "integrations", "settings"],
 } as const satisfies Record<Role, readonly string[]>;
 

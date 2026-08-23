@@ -13,6 +13,7 @@ import {
   CircleAlert,
   Clock3,
   FileHeart,
+  Grid2X2,
   Home,
   Plus,
   Search,
@@ -27,10 +28,29 @@ import { Appointment } from "@/lib/types";
 import { SectionTitle, StatCard, StatusBadge } from "./ui";
 import { GoogleCalendarLogo } from "./brand";
 import { portalPath } from "@/lib/portal-routes";
-import { createLeaveRequestRequest, getDoctorLeaveRequestsRequest, getDoctorProfileRequest, updateDoctorProfileRequest, DoctorProfile, LeaveRequestApi } from "@/lib/api";
+import {
+  AvailabilityApi,
+  AvailabilityOverrideApi,
+  DayOfWeek,
+  createDoctorAvailabilityOverrideRequest,
+  createLeaveRequestRequest,
+  deleteDoctorAvailabilityRequest,
+  deleteDoctorAvailabilityOverrideRequest,
+  getDoctorAvailabilityRequest,
+  getDoctorAvailabilityOverridesRequest,
+  getDoctorLeaveRequestsRequest,
+  getDoctorProfileRequest,
+  getDoctorSlotsRequest,
+  saveDoctorAvailabilityRequest,
+  updateDoctorProfileRequest,
+  DoctorProfile,
+  LeaveRequestApi,
+  SlotApi,
+} from "@/lib/api";
 const nav: NavItem[] = [
   { id: "overview", label: "Today", icon: Home },
   { id: "schedule", label: "Schedule", icon: CalendarDays },
+  { id: "slots", label: "Slots", icon: Grid2X2 },
   { id: "patients", label: "Patients", icon: Users },
   { id: "summaries", label: "Visit summaries", icon: FileHeart, badge: 2 },
   { id: "availability", label: "Availability", icon: Clock3 },
@@ -61,13 +81,14 @@ export function DoctorPortal({ section = "overview" }: { section?: string }) {
         <DoctorToday onOpen={setSelected} onNav={navigate} />
       )}{" "}
       {active === "schedule" && (
-        <DoctorSchedule onOpen={setSelected} notify={notify} />
+        <DoctorSchedule onOpen={setSelected} onManageAvailability={() => navigate("slots")} />
       )}{" "}
       {active === "patients" && <Patients />}{" "}
       {active === "summaries" && (
         <Summaries onOpen={setSelected} notify={notify} />
       )}{" "}
-      {active === "availability" && <Availability notify={notify} />}{" "}
+      {active === "availability" && <Availability notify={notify} onOpenSlots={() => navigate("slots")} />} {" "}
+      {active === "slots" && <DoctorSlots />} {" "}
       {active === "settings" && <DoctorSettings notify={notify} />}{" "}
       {selected && (
         <ConsultationPanel
@@ -328,22 +349,45 @@ function AppointmentRow({
     </button>
   );
 }
+function normaliseTime(value: string) {
+  return value.replace(/^0/, "").replace(/\s+/g, " ").toUpperCase();
+}
+
+function formatScheduleDate(date: string) {
+  return new Date(`${date}T12:00:00`).toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
 function DoctorSchedule({
   onOpen,
-  notify,
+  onManageAvailability,
 }: {
   onOpen: (a: Appointment) => void;
-  notify: (s: string) => void;
+  onManageAvailability: () => void;
 }) {
   const { appointments } = useApp();
   const [dayOffset, setDayOffset] = useState(0);
   const [view, setView] = useState("Day");
-  const [blocked, setBlocked] = useState(false);
-  const selectedDate = `2026-08-${String(20 + dayOffset).padStart(2, "0")}`;
+  const selectedDate = `2026-08-${String(23 + dayOffset).padStart(2, "0")}`;
+  const [slots, setSlots] = useState<SlotApi[]>([]);
+  const [slotsDate, setSlotsDate] = useState("");
+  const [slotsError, setSlotsError] = useState("");
   const mine = appointments.filter(
     (a) =>
       a.doctorId === "d1" && a.status === "upcoming" && a.date === selectedDate,
   );
+  useEffect(() => {
+    let cancelled = false;
+    void getDoctorProfileRequest()
+      .then((doctor) => getDoctorSlotsRequest(doctor.id, selectedDate))
+      .then((loaded) => { if (!cancelled) { setSlots(loaded); setSlotsDate(selectedDate); } })
+      .catch((e) => { if (!cancelled) { setSlotsError(e instanceof Error ? e.message : "Unable to load slots."); setSlotsDate(selectedDate); } });
+    return () => { cancelled = true; };
+  }, [selectedDate]);
   return (
     <div>
       <Header
@@ -351,18 +395,11 @@ function DoctorSchedule({
         copy="Plan your day and keep every appointment on track."
         action={
           <button
-            onClick={() => {
-              setBlocked(!blocked);
-              notify(
-                blocked
-                  ? "Blocked time removed"
-                  : "3:00–3:45 PM blocked for administrative time",
-              );
-            }}
+            onClick={onManageAvailability}
             className="rounded-xl bg-brand px-4 py-3 text-xs font-extrabold text-white"
           >
             <Plus size={15} className="mr-2 inline" />
-            Block time
+            Manage time
           </button>
         }
       />
@@ -376,9 +413,7 @@ function DoctorSchedule({
             >
               <ChevronLeft size={15} />
             </button>
-            <p className="text-sm font-extrabold">
-              August {20 + dayOffset}, 2026
-            </p>
+            <p className="text-sm font-extrabold">{formatScheduleDate(selectedDate)}</p>
             <button
               disabled={dayOffset >= 7}
               onClick={() => setDayOffset(dayOffset + 1)}
@@ -406,57 +441,18 @@ function DoctorSchedule({
           </div>
         </div>
         {view === "Day" ? (
-          <div className="grid min-h-[600px] grid-cols-[68px_1fr]">
-            <div className="border-r border-line pt-5">
-              {[
-                "09 AM",
-                "10 AM",
-                "11 AM",
-                "12 PM",
-                "01 PM",
-                "02 PM",
-                "03 PM",
-                "04 PM",
-              ].map((x) => (
-                <div
-                  key={x}
-                  className="h-17 pr-3 text-right text-[9px] font-bold text-muted"
-                >
-                  {x}
-                </div>
-              ))}
-            </div>
-            <div className="relative pt-5">
-              {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
-                <div key={i} className="h-17 border-b border-line/70" />
-              ))}
-              {mine.map((a, i) => (
-                <button
-                  key={a.id}
-                  onClick={() => onOpen(a)}
-                  style={{ top: 20 + i * 90 }}
-                  className={`absolute left-3 right-3 h-20 overflow-hidden rounded-xl border-l-4 p-3 text-left ${a.urgency === "High" ? "border-red-500 bg-red-50" : "border-brand bg-brand-soft"}`}
-                >
-                  <div className="flex justify-between">
-                    <p className="text-[10px] font-extrabold">
-                      {a.time} · {a.patientName}
-                    </p>
-                    <span className="text-[9px] text-muted">{a.type}</span>
-                  </div>
-                  <p className="mt-1 truncate text-[9px] text-muted">
-                    {a.complaint}
-                  </p>
-                </button>
-              ))}
-              {blocked && (
-                <div
-                  style={{ top: 20 + 6 * 76 }}
-                  className="absolute left-3 right-3 h-15 rounded-xl border-l-4 border-slate-400 bg-slate-100 p-3 text-xs font-extrabold text-slate-600"
-                >
-                  Administrative time · 03:00 PM
-                </div>
-              )}
-            </div>
+          <div className="divide-y divide-line">
+            {slotsDate !== selectedDate ? <p className="p-6 text-xs text-muted">Loading the day’s slots…</p> : slots.length === 0 ? <p className="p-6 text-xs text-muted">No availability configured for this date.</p> : slots.map((slot) => {
+              const start = new Date(slot.startAt);
+              const end = new Date(slot.endAt);
+              const startLabel = start.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+              const endLabel = end.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+              const appointment = mine.find((item) => normaliseTime(item.time) === normaliseTime(startLabel));
+              return <div key={slot.startAt} className="grid min-h-20 grid-cols-[72px_1fr] sm:grid-cols-[92px_1fr]">
+                <div className="border-r border-line px-3 py-4 text-right text-[10px] font-extrabold text-muted">{startLabel}</div>
+                {appointment ? <button onClick={() => onOpen(appointment)} className={`m-2 rounded-xl border-l-4 p-3 text-left ${appointment.urgency === "High" ? "border-red-500 bg-red-50" : "border-brand bg-brand-soft"}`}><div className="flex justify-between gap-2"><p className="text-[10px] font-extrabold">{startLabel}–{endLabel} · {appointment.patientName}</p><span className="text-[9px] text-muted">{appointment.type}</span></div><p className="mt-1 truncate text-[9px] text-muted">{appointment.complaint}</p></button> : <div className={`m-2 flex items-center justify-between rounded-xl border px-3 py-2 text-[10px] font-extrabold ${slot.status === "BLOCKED" ? "border-slate-200 bg-slate-100 text-slate-500" : "border-brand/20 bg-brand-soft/40 text-brand-dark"}`}><span>{startLabel}–{endLabel}</span><span className="text-[9px] uppercase tracking-wider opacity-70">{slot.status}</span></div>}
+              </div>;
+            })}
           </div>
         ) : (
           <div className="p-6">
@@ -486,8 +482,107 @@ function DoctorSchedule({
           </div>
         )}
       </div>
+      {slotsError && <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-xs font-bold text-red-700">{slotsError}</p>}
     </div>
   );
+}
+function DoctorSlots() {
+  const [dayOffset, setDayOffset] = useState(0);
+  const selectedDate = `2026-08-${String(23 + dayOffset).padStart(2, "0")}`;
+  const [slots, setSlots] = useState<SlotApi[]>([]);
+  const [loadedDate, setLoadedDate] = useState("");
+  const [error, setError] = useState("");
+  const [selectedSlots, setSelectedSlots] = useState<Set<string>>(new Set());
+  const [blocking, setBlocking] = useState(false);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [overrides, setOverrides] = useState<AvailabilityOverrideApi[]>([]);
+  const [extraOpen, setExtraOpen] = useState(false);
+  const [extraStart, setExtraStart] = useState("18:00");
+  const [extraEnd, setExtraEnd] = useState("19:00");
+  const [extraReason, setExtraReason] = useState("");
+  const [savingExtra, setSavingExtra] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void getDoctorProfileRequest()
+      .then((doctor) => getDoctorSlotsRequest(doctor.id, selectedDate))
+      .then((loaded) => getDoctorAvailabilityOverridesRequest(selectedDate).then((loadedOverrides) => ({ loaded, loadedOverrides })))
+      .then(({ loaded, loadedOverrides }) => { if (!cancelled) { setError(""); setSlots(loaded); setOverrides(loadedOverrides); setSelectedSlots(new Set()); setSelectionMode(false); setLoadedDate(selectedDate); } })
+      .catch((e) => { if (!cancelled) { setError(e instanceof Error ? e.message : "Unable to load slots."); setLoadedDate(selectedDate); } });
+    return () => { cancelled = true; };
+  }, [selectedDate]);
+  async function refreshAfterChange() {
+    const doctor = await getDoctorProfileRequest();
+    const [loaded, loadedOverrides] = await Promise.all([
+      getDoctorSlotsRequest(doctor.id, selectedDate),
+      getDoctorAvailabilityOverridesRequest(selectedDate),
+    ]);
+    setSlots(loaded);
+    setOverrides(loadedOverrides);
+    setSelectedSlots(new Set());
+    setLoadedDate(selectedDate);
+  }
+  function toggleSlot(slot: SlotApi) {
+    if (!selectionMode || slot.status !== "AVAILABLE") return;
+    setSelectedSlots((current) => {
+      const next = new Set(current);
+      if (next.has(slot.startAt)) next.delete(slot.startAt); else next.add(slot.startAt);
+      return next;
+    });
+  }
+  async function blockSelectedSlots() {
+    const chosen = slots.filter((slot) => selectedSlots.has(slot.startAt) && slot.status === "AVAILABLE");
+    if (chosen.length === 0) return;
+    setBlocking(true); setError("");
+    try {
+      await Promise.all(chosen.map((slot) => createDoctorAvailabilityOverrideRequest({
+        date: selectedDate,
+        startTime: slot.startAt.slice(11, 16),
+        endTime: slot.endAt.slice(11, 16),
+        type: "BLOCKED",
+        reason: "Blocked from the Slots page",
+      })));
+      await refreshAfterChange();
+    } catch (e) { setError(e instanceof Error ? e.message : "Unable to block the selected slots."); }
+    finally { setBlocking(false); }
+  }
+  async function addExtraTime(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault(); setSavingExtra(true); setError("");
+    if (![extraStart, extraEnd].every((value) => /^([01]\d|2[0-3]):(00|30)$/.test(value)) || extraStart >= extraEnd) {
+      setError("Extra time must use 30-minute boundaries and end after it starts.");
+      setSavingExtra(false);
+      return;
+    }
+    try {
+      await createDoctorAvailabilityOverrideRequest({ date: selectedDate, startTime: extraStart, endTime: extraEnd, type: "EXTRA", reason: extraReason.trim() || undefined });
+      await refreshAfterChange();
+      setExtraReason(""); setExtraOpen(false);
+    } catch (e) { setError(e instanceof Error ? e.message : "Unable to add extra time."); }
+    finally { setSavingExtra(false); }
+  }
+  async function deleteOverride(item: AvailabilityOverrideApi) {
+    try {
+      await deleteDoctorAvailabilityOverrideRequest(item.id);
+      await refreshAfterChange();
+    } catch (e) { setError(e instanceof Error ? e.message : "Unable to delete override."); }
+  }
+  return <div>
+    <Header title="Slots" copy="Review every 30-minute slot and its current status." />
+    <section className="card overflow-hidden">
+      <div className="flex flex-wrap items-center gap-3 border-b border-line p-5">
+        <button disabled={dayOffset <= 0} onClick={() => setDayOffset((value) => value - 1)} className="grid size-8 place-items-center rounded-lg border border-line disabled:opacity-30"><ChevronLeft size={15} /></button>
+        <p className="text-sm font-extrabold">{formatScheduleDate(selectedDate)}</p>
+        <button disabled={dayOffset >= 7} onClick={() => setDayOffset((value) => value + 1)} className="grid size-8 place-items-center rounded-lg border border-line disabled:opacity-30"><ChevronRight size={15} /></button>
+        <button onClick={() => setDayOffset(0)} className="rounded-lg bg-brand-soft px-3 py-2 text-[10px] font-extrabold text-brand">Today</button>
+      </div>
+      {error && <p role="alert" className="m-5 rounded-xl bg-red-50 p-3 text-xs font-bold text-red-700">{error}</p>}
+      {loadedDate !== selectedDate ? <p className="p-6 text-xs text-muted">Loading slots…</p> : slots.length === 0 ? <p className="p-6 text-xs text-muted">No availability configured for this date.</p> : <>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4"><p className="text-xs text-muted">{selectionMode ? "Select available slots, then confirm the block." : "Viewing mode — enable selection before choosing slots."}</p><div className="flex flex-wrap items-center gap-2"><button type="button" onClick={() => { setSelectionMode((value) => !value); setSelectedSlots(new Set()); }} disabled={blocking} className={`rounded-xl border px-4 py-2 text-[10px] font-extrabold ${selectionMode ? "border-brand bg-brand-soft text-brand" : "border-line"}`}>{selectionMode ? "Cancel selection" : "Select slots to block"}</button>{selectionMode && <><button type="button" onClick={() => setSelectedSlots(new Set())} disabled={selectedSlots.size === 0 || blocking} className="rounded-xl border border-line px-4 py-2 text-[10px] font-extrabold disabled:opacity-40">Clear</button><button type="button" onClick={() => void blockSelectedSlots()} disabled={selectedSlots.size === 0 || blocking} className="rounded-xl bg-brand px-4 py-2 text-[10px] font-extrabold text-white disabled:opacity-40">{blocking ? "Blocking…" : `Block ${selectedSlots.size || "selected"} slot${selectedSlots.size === 1 ? "" : "s"}`}</button></>}</div></div>
+        <div className="grid gap-3 p-5 sm:grid-cols-3 lg:grid-cols-5">{slots.map((slot) => { const start = new Date(slot.startAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); const end = new Date(slot.endAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); const selected = selectedSlots.has(slot.startAt); const slotStart = slot.startAt.slice(11, 16); const slotEnd = slot.endAt.slice(11, 16); const isExtra = overrides.some((item) => item.type === "EXTRA" && item.startTime.slice(0, 5) <= slotStart && item.endTime.slice(0, 5) >= slotEnd); return <button type="button" disabled={slot.status === "BLOCKED" || blocking || !selectionMode} onClick={() => toggleSlot(slot)} key={slot.startAt} className={`rounded-xl border px-4 py-4 text-left transition ${slot.status === "BLOCKED" ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-600" : selected ? "border-brand bg-brand text-white" : isExtra ? "border-amber-200 bg-amber-50 text-amber-900" : selectionMode ? "border-brand/20 bg-brand-soft text-brand-dark hover:border-brand" : "border-brand/20 bg-brand-soft text-brand-dark"}`}><div className="flex items-center justify-between gap-2"><p className="text-xs font-extrabold">{start}–{end}</p><span className="text-[9px] font-extrabold uppercase tracking-wider opacity-70">{selected ? "SELECTED" : slot.status === "BLOCKED" ? "BLOCKED" : isExtra ? "EXTRA" : "AVAILABLE"}</span></div><p className={`mt-2 text-[10px] ${selected ? "text-white/75" : "text-muted"}`}>{slot.status === "BLOCKED" ? "Unavailable by doctor" : selected ? "Ready to block" : isExtra ? "Extra availability" : "Open for booking"}</p></button>; })}</div>
+      </>}
+      <div className="border-t border-line p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-extrabold">Add extra time</p><p className="mt-1 text-[10px] text-muted">Create availability outside your normal working hours.</p></div><button type="button" onClick={() => setExtraOpen((value) => !value)} className="rounded-xl border border-brand/30 px-4 py-2 text-[10px] font-extrabold text-brand">{extraOpen ? "Cancel" : "Add extra time"}</button></div>{extraOpen && <form onSubmit={addExtraTime} className="mt-4 grid gap-3 sm:grid-cols-3"><label className="text-[10px] font-extrabold">From<input required type="time" step="1800" value={extraStart} onChange={(e) => setExtraStart(e.target.value)} className="mt-2 w-full rounded-xl border border-line p-3 text-xs" /></label><label className="text-[10px] font-extrabold">Until<input required type="time" step="1800" value={extraEnd} onChange={(e) => setExtraEnd(e.target.value)} className="mt-2 w-full rounded-xl border border-line p-3 text-xs" /></label><input value={extraReason} onChange={(e) => setExtraReason(e.target.value)} placeholder="Reason (optional)" className="self-end rounded-xl border border-line p-3 text-xs" /><button type="submit" disabled={savingExtra} className="rounded-xl bg-brand px-4 py-3 text-[10px] font-extrabold text-white sm:col-span-3">{savingExtra ? "Adding…" : "Add extra availability"}</button></form>}</div>
+      {overrides.length > 0 && <div className="border-t border-line p-5"><p className="text-sm font-extrabold">Changes for this date</p><div className="mt-3 space-y-2">{overrides.map((item) => <div key={item.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-line p-3 text-[10px]"><span className={`rounded-full px-2 py-1 font-extrabold ${item.type === "BLOCKED" ? "bg-slate-100 text-slate-700" : "bg-emerald-50 text-emerald-700"}`}>{item.type}</span><span className="font-bold">{item.startTime.slice(0, 5)}–{item.endTime.slice(0, 5)}</span><span className="min-w-0 flex-1 text-muted">{item.reason || "No reason provided"}</span><button type="button" onClick={() => void deleteOverride(item)} className="font-extrabold text-red-700">Delete</button></div>)}</div></div>}
+    </section>
+  </div>;
 }
 function Patients() {
   const { appointments } = useApp();
@@ -695,7 +790,21 @@ function Summaries({
     </div>
   );
 }
-function Availability({ notify }: { notify: (s: string) => void }) {
+function Availability({ notify, onOpenSlots }: { notify: (s: string) => void; onOpenSlots: () => void }) {
+  const days: { label: string; value: DayOfWeek }[] = [
+    { label: "Monday", value: "MONDAY" },
+    { label: "Tuesday", value: "TUESDAY" },
+    { label: "Wednesday", value: "WEDNESDAY" },
+    { label: "Thursday", value: "THURSDAY" },
+    { label: "Friday", value: "FRIDAY" },
+    { label: "Saturday", value: "SATURDAY" },
+    { label: "Sunday", value: "SUNDAY" },
+  ];
+  const [weekly, setWeekly] = useState<Record<DayOfWeek, { enabled: boolean; startTime: string; endTime: string; timezone: string }>>(
+    Object.fromEntries(days.map(({ value }) => [value, { enabled: false, startTime: "09:00", endTime: "17:00", timezone: "Asia/Kolkata" }])) as Record<DayOfWeek, { enabled: boolean; startTime: string; endTime: string; timezone: string }>,
+  );
+  const [loadingWeekly, setLoadingWeekly] = useState(true);
+  const [savingWeekly, setSavingWeekly] = useState(false);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [reason, setReason] = useState("");
@@ -703,7 +812,37 @@ function Availability({ notify }: { notify: (s: string) => void }) {
   const [loadingRequests, setLoadingRequests] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  useEffect(() => { void getDoctorLeaveRequestsRequest().then(setRequests).catch((e) => setError(e instanceof Error ? e.message : "Unable to load leave requests.")).finally(() => setLoadingRequests(false)); }, []);
+  useEffect(() => {
+    void Promise.all([getDoctorAvailabilityRequest(), getDoctorLeaveRequestsRequest()])
+      .then(([availability, loadedRequests]) => {
+        setWeekly((current) => {
+          const next = { ...current };
+          availability.forEach((item: AvailabilityApi) => {
+            next[item.dayOfWeek] = { enabled: true, startTime: item.startTime.slice(0, 5), endTime: item.endTime.slice(0, 5), timezone: item.timezone };
+          });
+          return next;
+        });
+        setRequests(loadedRequests);
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : "Unable to load availability."))
+      .finally(() => { setLoadingWeekly(false); setLoadingRequests(false); });
+  }, []);
+  function updateDay(day: DayOfWeek, patch: Partial<(typeof weekly)[DayOfWeek]>) {
+    setWeekly((current) => ({ ...current, [day]: { ...current[day], ...patch } }));
+  }
+  async function saveWeekly() {
+    setSavingWeekly(true); setError("");
+    try {
+      await Promise.all(days.map(({ value }) => {
+        const item = weekly[value];
+        return item.enabled
+          ? saveDoctorAvailabilityRequest(value, { startTime: item.startTime, endTime: item.endTime, timezone: item.timezone })
+          : deleteDoctorAvailabilityRequest(value);
+      }));
+      notify("Weekly availability saved");
+    } catch (e) { setError(e instanceof Error ? e.message : "Unable to save weekly availability."); }
+    finally { setSavingWeekly(false); }
+  }
   async function submitLeave(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault(); setError("");
     if (!startDate || !endDate || !reason.trim()) { setError("Choose a date range and provide a reason."); return; }
@@ -722,50 +861,44 @@ function Availability({ notify }: { notify: (s: string) => void }) {
         <section className="card p-6">
           <SectionTitle
             title="Weekly working hours"
-            subtitle="45-minute appointment slots"
+            subtitle="30-minute slots generated from these working hours"
           />
           <div className="mt-5 divide-y divide-line">
-            {[
-              "Monday",
-              "Tuesday",
-              "Wednesday",
-              "Thursday",
-              "Friday",
-              "Saturday",
-              "Sunday",
-            ].map((d, i) => (
+            {days.map(({ label, value }) => {
+              const item = weekly[value];
+              return (
               <div
                 className="flex flex-wrap items-center gap-3 py-4 sm:gap-4"
-                key={d}
+                key={value}
               >
                 <input
                   type="checkbox"
-                  defaultChecked={i < 5}
+                  checked={item.enabled}
+                  onChange={(e) => updateDay(value, { enabled: e.target.checked })}
                   className="accent-brand"
                 />
-                <span className="w-24 text-xs font-extrabold">{d}</span>
-                {i < 5 ? (
+                <span className="w-24 text-xs font-extrabold">{label}</span>
+                {item.enabled ? (
                   <>
-                    <span className="rounded-lg bg-canvas px-3 py-2 text-[10px] font-bold">
-                      09:00 AM
-                    </span>
+                    <input aria-label={`${label} start time`} type="time" step="1800" value={item.startTime} onChange={(e) => updateDay(value, { startTime: e.target.value })} className="rounded-lg bg-canvas px-3 py-2 text-[10px] font-bold" />
                     <span className="text-muted">—</span>
-                    <span className="rounded-lg bg-canvas px-3 py-2 text-[10px] font-bold">
-                      05:00 PM
-                    </span>
+                    <input aria-label={`${label} end time`} type="time" step="1800" value={item.endTime} onChange={(e) => updateDay(value, { endTime: e.target.value })} className="rounded-lg bg-canvas px-3 py-2 text-[10px] font-bold" />
                   </>
                 ) : (
                   <span className="text-[10px] text-muted">Not available</span>
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
           <button
-            onClick={() => notify("Working hours saved")}
+            onClick={() => void saveWeekly()}
+            disabled={loadingWeekly || savingWeekly}
             className="mt-5 rounded-xl bg-brand px-5 py-3 text-xs font-extrabold text-white"
           >
-            Save working hours
+            {savingWeekly ? "Saving…" : "Save working hours"}
           </button>
+          <button type="button" onClick={onOpenSlots} className="mt-8 flex w-full items-center justify-center gap-2 rounded-xl border border-brand/30 py-3 text-xs font-extrabold text-brand">Open Slots to block a specific time <ArrowRight size={15} /></button>
         </section>
         <aside className="space-y-5">
           <div className="card p-5">
