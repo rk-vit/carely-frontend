@@ -49,3 +49,46 @@ export async function updateDoctorProfileRequest(payload: Record<string, unknown
   if (!response.ok) throw new Error(body?.detail || body?.message || "Unable to save doctor profile.");
   return body as DoctorProfile;
 }
+
+export interface LeaveRequestApi {
+  id: string;
+  doctorId: string;
+  doctorName: string;
+  doctorEmail: string;
+  startDate: string;
+  endDate: string;
+  reason: string;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  reviewerNote: string | null;
+  createdAt: string;
+}
+
+export async function createLeaveRequestRequest(payload: { startDate: string; endDate: string; reason: string }) {
+  const response = await fetch(apiUrl("/doctor/leave-requests"), { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify(payload) });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(body?.detail || body?.message || "Unable to submit leave request.");
+  return body as LeaveRequestApi;
+}
+
+export async function getDoctorLeaveRequestsRequest() {
+  const response = await fetch(apiUrl("/doctor/leave-requests"), { credentials: "include", cache: "no-store" });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(body?.detail || body?.message || "Unable to load leave requests.");
+  return body as LeaveRequestApi[];
+}
+
+export async function getAdminLeaveRequestsRequest(status?: LeaveRequestApi["status"]) {
+  const response = await fetch(apiUrl(`/admin/leave-requests${status ? `?status=${status}` : ""}`), { credentials: "include", cache: "no-store" });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(body?.detail || body?.message || "Unable to load leave requests.");
+  return body as LeaveRequestApi[];
+}
+
+export async function reviewAdminLeaveRequest(id: string, decision: "approve" | "reject", reviewerNote?: string) {
+  const response = await fetch(apiUrl(`/admin/leave-requests/${id}/${decision}`), { method: "PATCH", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ reviewerNote: reviewerNote || null }) });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(body?.detail || body?.message || "Unable to review leave request.");
+  return body as LeaveRequestApi;
+}

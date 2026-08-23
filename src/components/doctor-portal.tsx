@@ -25,7 +25,7 @@ import { useApp } from "@/lib/app-context";
 import { Appointment } from "@/lib/types";
 import { SectionTitle, StatCard, StatusBadge } from "./ui";
 import { GoogleCalendarLogo } from "./brand";
-import { getDoctorProfileRequest, updateDoctorProfileRequest, DoctorProfile } from "@/lib/api";
+import { createLeaveRequestRequest, getDoctorLeaveRequestsRequest, getDoctorProfileRequest, updateDoctorProfileRequest, DoctorProfile, LeaveRequestApi } from "@/lib/api";
 const nav: NavItem[] = [
   { id: "overview", label: "Today", icon: Home },
   { id: "schedule", label: "Schedule", icon: CalendarDays },
@@ -693,7 +693,22 @@ function Summaries({
   );
 }
 function Availability({ notify }: { notify: (s: string) => void }) {
-  const [leave, setLeave] = useState(false);
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [reason, setReason] = useState("");
+  const [requests, setRequests] = useState<LeaveRequestApi[]>([]);
+  const [loadingRequests, setLoadingRequests] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => { void getDoctorLeaveRequestsRequest().then(setRequests).catch((e) => setError(e instanceof Error ? e.message : "Unable to load leave requests.")).finally(() => setLoadingRequests(false)); }, []);
+  async function submitLeave(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault(); setError("");
+    if (!startDate || !endDate || !reason.trim()) { setError("Choose a date range and provide a reason."); return; }
+    setSubmitting(true);
+    try { const request = await createLeaveRequestRequest({ startDate, endDate, reason: reason.trim() }); setRequests((current) => [request, ...current]); setReason(""); notify("Leave request submitted for admin approval"); }
+    catch (e) { setError(e instanceof Error ? e.message : "Unable to submit leave request."); }
+    finally { setSubmitting(false); }
+  }
   return (
     <div>
       <Header
@@ -756,30 +771,24 @@ function Availability({ notify }: { notify: (s: string) => void }) {
             <p className="mt-2 text-xs leading-5 text-muted">
               The clinic will review affected appointments and notify patients.
             </p>
-            <input
-              type="date"
-              defaultValue="2026-08-28"
-              className="mt-4 w-full rounded-xl border border-line p-3 text-xs"
-            />
+            <form onSubmit={submitLeave}>
+            <label className="mt-4 block text-[10px] font-extrabold">Start date<input required type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="mt-2 w-full rounded-xl border border-line p-3 text-xs" /></label>
+            <label className="mt-3 block text-[10px] font-extrabold">End date<input required type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="mt-2 w-full rounded-xl border border-line p-3 text-xs" /></label>
             <textarea
+              required
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
               placeholder="Optional note"
               className="mt-3 w-full resize-none rounded-xl border border-line p-3 text-xs"
             />
-            <button
-              onClick={() => {
-                setLeave(true);
-                notify("Leave request sent to clinic admin");
-              }}
+            <button type="submit" disabled={submitting}
               className="mt-3 w-full rounded-xl border border-brand/30 py-3 text-xs font-extrabold text-brand"
             >
-              Request leave
+              {submitting ? "Submitting…" : "Request leave"}
             </button>
-            {leave && (
-              <p className="mt-3 flex gap-2 text-[10px] font-bold text-emerald-700">
-                <CheckCircle2 size={14} />
-                Pending admin approval
-              </p>
-            )}
+            </form>
+            {error && <p role="alert" className="mt-3 rounded-xl bg-red-50 p-3 text-[10px] font-bold text-red-700">{error}</p>}
+            {!loadingRequests && requests.length > 0 && <div className="mt-5 border-t border-line pt-4"><p className="text-[10px] font-extrabold uppercase tracking-wider text-muted">Your requests</p><div className="mt-3 space-y-2">{requests.slice(0, 4).map((request) => <div key={request.id} className="rounded-xl border border-line p-3 text-[10px]"><div className="flex items-center justify-between gap-2"><span className="font-bold">{request.startDate} → {request.endDate}</span><span className={`rounded-full px-2 py-1 font-extrabold ${request.status === "APPROVED" ? "bg-emerald-50 text-emerald-700" : request.status === "REJECTED" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>{request.status}</span></div><p className="mt-1 text-muted">{request.reason}</p>{request.reviewerNote && <p className="mt-1 font-bold text-muted">Admin: {request.reviewerNote}</p>}</div>)}</div></div>}
           </div>
           <div className="rounded-2xl bg-amber-50 p-5">
             <CircleAlert size={18} className="text-amber-700" />

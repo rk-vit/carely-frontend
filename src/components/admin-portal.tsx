@@ -45,10 +45,11 @@ import { useApp } from "@/lib/app-context";
 import { Doctor } from "@/lib/types";
 import { DoctorAvatar, SectionTitle, StatCard, StatusBadge } from "./ui";
 import { GmailLogo, GoogleCalendarLogo } from "./brand";
-import { createDoctorRequest, DoctorApiResponse, getAdminDoctorRequest, updateAdminDoctorRequest } from "@/lib/api";
+import { createDoctorRequest, DoctorApiResponse, getAdminDoctorRequest, getAdminLeaveRequestsRequest, LeaveRequestApi, reviewAdminLeaveRequest, updateAdminDoctorRequest } from "@/lib/api";
 const nav: NavItem[] = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "doctors", label: "Doctors", icon: Stethoscope },
+  { id: "leave-requests", label: "Leave requests", icon: Calendar },
   { id: "appointments", label: "Appointments", icon: CalendarDays },
   { id: "patients", label: "Patients", icon: Users },
   { id: "notifications", label: "Notification logs", icon: BellRing, badge: 2 },
@@ -98,6 +99,7 @@ export function AdminPortal() {
           notify={notify}
         />
       )}{" "}
+      {active === "leave-requests" && <AdminLeaveRequests notify={notify} />}{" "}
       {active === "appointments" && <AdminAppointments notify={notify} />}{" "}
       {active === "patients" && <AdminPatients />}{" "}
       {active === "notifications" && <NotificationLogs notify={notify} />}{" "}
@@ -609,6 +611,18 @@ function DoctorsView({
       </div>
     </div>
   );
+}
+function AdminLeaveRequests({ notify }: { notify: (s: string) => void }) {
+  const [requests, setRequests] = useState<LeaveRequestApi[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [filter, setFilter] = useState<LeaveRequestApi["status"] | "ALL">("PENDING");
+  const [reviewing, setReviewing] = useState<string | null>(null);
+  useEffect(() => { let cancelled = false; void getAdminLeaveRequestsRequest(filter === "ALL" ? undefined : filter).then((items) => { if (!cancelled) setRequests(items); }).catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : "Unable to load leave requests."); }).finally(() => { if (!cancelled) setLoading(false); }); return () => { cancelled = true; }; }, [filter]);
+  async function review(id: string, decision: "approve" | "reject") { setReviewing(id); setLoading(true); try { await reviewAdminLeaveRequest(id, decision); const items = await getAdminLeaveRequestsRequest(filter === "ALL" ? undefined : filter); setRequests(items); notify(`Leave request ${decision}d`); } catch (e) { setError(e instanceof Error ? e.message : "Unable to review leave request."); } finally { setReviewing(null); setLoading(false); } }
+  return <div><Head title="Leave requests" copy="Review doctor time-off requests before they affect the clinic schedule." action={<select value={filter} onChange={(e) => { setLoading(true); setError(""); setFilter(e.target.value as LeaveRequestApi["status"] | "ALL"); }} className="rounded-xl border border-line px-4 py-3 text-xs font-bold"><option value="PENDING">Pending</option><option value="APPROVED">Approved</option><option value="REJECTED">Rejected</option><option value="ALL">All requests</option></select>} />
+    <section className="card overflow-hidden">{error && <p role="alert" className="m-5 rounded-xl bg-red-50 p-3 text-xs font-bold text-red-700">{error}</p>}{loading ? <p className="p-6 text-sm text-muted">Loading leave requests…</p> : requests.length === 0 ? <p className="p-6 text-sm text-muted">No {filter === "ALL" ? "leave" : filter.toLowerCase()} requests.</p> : <div className="divide-y divide-line">{requests.map((request) => <article key={request.id} className="p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-sm font-extrabold">{request.doctorName}</p><p className="mt-1 text-xs text-brand">{request.startDate} → {request.endDate}</p><p className="mt-1 text-[10px] text-muted">{request.doctorEmail}</p></div><span className={`rounded-full px-2.5 py-1 text-[9px] font-extrabold ${request.status === "PENDING" ? "bg-amber-50 text-amber-700" : request.status === "APPROVED" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>{request.status}</span></div><p className="mt-4 rounded-xl bg-canvas p-3 text-xs leading-5 text-muted">{request.reason}</p>{request.reviewerNote && <p className="mt-2 text-[10px] font-bold text-muted">Reviewer note: {request.reviewerNote}</p>}{request.status === "PENDING" && <div className="mt-4 flex justify-end gap-2"><button disabled={reviewing === request.id} onClick={() => review(request.id, "reject")} className="rounded-xl border border-red-200 px-4 py-2.5 text-xs font-extrabold text-red-700">Reject</button><button disabled={reviewing === request.id} onClick={() => review(request.id, "approve")} className="rounded-xl bg-brand px-4 py-2.5 text-xs font-extrabold text-white">{reviewing === request.id ? "Saving…" : "Approve"}</button></div>}</article>)}</div>}</section>
+  </div>;
 }
 function AdminAppointments({ notify }: { notify: (s: string) => void }) {
   const { appointments, doctors, updateAppointment } = useApp();
@@ -1293,8 +1307,18 @@ function LeaveModal({
   close: () => void;
   done: () => void;
 }) {
-  const { updateDoctor } = useApp();
-  const [ack, setAck] = useState(false);
+  const [requests, setRequests] = useState<LeaveRequestApi[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [note, setNote] = useState("");
+  const [reviewing, setReviewing] = useState<string | null>(null);
+  useEffect(() => { void getAdminLeaveRequestsRequest().then((items) => setRequests(items.filter((item) => item.doctorId === doctor.id))).catch((e) => setError(e instanceof Error ? e.message : "Unable to load leave requests.")).finally(() => setLoading(false)); }, [doctor.id]);
+  async function review(request: LeaveRequestApi, decision: "approve" | "reject") {
+    setReviewing(request.id); setError("");
+    try { const updated = await reviewAdminLeaveRequest(request.id, decision, note); setRequests((items) => items.map((item) => item.id === updated.id ? updated : item)); setNote(""); done(); }
+    catch (e) { setError(e instanceof Error ? e.message : "Unable to review leave request."); }
+    finally { setReviewing(null); }
+  }
   return (
     <div className="fixed inset-0 z-[90] grid place-items-center bg-ink/40 p-4 backdrop-blur-sm">
       <div className="w-full max-w-lg rounded-[24px] bg-white p-6 shadow-2xl">
@@ -1311,64 +1335,14 @@ function LeaveModal({
             <X size={18} />
           </button>
         </div>
-        <div className="mt-5 rounded-xl bg-amber-50 p-4">
-          <div className="flex gap-3">
-            <AlertTriangle size={19} className="shrink-0 text-amber-700" />
-            <div>
-              <p className="text-xs font-extrabold text-amber-900">
-                4 existing appointments are affected
-              </p>
-              <p className="mt-1 text-[10px] leading-5 text-amber-800">
-                Patients on 24 August will need another doctor or a new time.
-              </p>
-            </div>
-          </div>
-        </div>
-        <div className="mt-5 space-y-2">
-          {[
-            "Aarav Sharma · 09:00 AM",
-            "Riya Nair · 10:30 AM",
-            "Varun Kumar · 12:00 PM",
-            "Sara Das · 03:00 PM",
-          ].map((x) => (
-            <div
-              key={x}
-              className="flex items-center gap-3 rounded-xl border border-line p-3 text-[10px] font-bold"
-            >
-              <span className="size-2 rounded-full bg-amber-400" />
-              {x}
-              <span className="ml-auto text-muted">Needs action</span>
-            </div>
-          ))}
-        </div>
-        <label className="mt-5 flex gap-3 rounded-xl bg-canvas p-4 text-[10px] leading-5 text-muted">
-          <input
-            checked={ack}
-            onChange={(e) => setAck(e.target.checked)}
-            type="checkbox"
-            className="mt-1 accent-brand"
-          />
-          Notify all affected patients by email and offer the next available
-          slot.
-        </label>
-        <div className="mt-5 flex justify-end gap-2">
-          <button
-            onClick={close}
-            className="rounded-xl border border-line px-5 py-3 text-xs font-bold"
-          >
-            Go back
-          </button>
-          <button
-            disabled={!ack}
-            onClick={() => {
-              updateDoctor(doctor.id, { onLeave: true });
-              done();
-            }}
-            className="rounded-xl bg-amber-600 px-5 py-3 text-xs font-extrabold text-white disabled:opacity-40"
-          >
-            Confirm leave & notify
-          </button>
-        </div>
+        {loading && <p className="mt-5 text-sm text-muted">Loading leave requests…</p>}
+        {error && <p role="alert" className="mt-5 rounded-xl bg-red-50 p-3 text-xs font-bold text-red-700">{error}</p>}
+        {!loading && !error && requests.length === 0 && <p className="mt-5 rounded-xl bg-canvas p-4 text-xs text-muted">No leave requests have been submitted for this doctor.</p>}
+        {!loading && requests.map((request) => <div key={request.id} className="mt-5 rounded-xl border border-line p-4">
+          <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-extrabold">{request.startDate} → {request.endDate}</p><p className="mt-1 text-[10px] text-muted">Submitted {new Date(request.createdAt).toLocaleDateString()}</p></div><span className={`rounded-full px-2.5 py-1 text-[9px] font-extrabold ${request.status === "PENDING" ? "bg-amber-50 text-amber-700" : request.status === "APPROVED" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>{request.status}</span></div>
+          <p className="mt-3 text-xs leading-5 text-muted">{request.reason}</p>
+          {request.status === "PENDING" && <><textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Optional reviewer note" className="mt-4 w-full resize-none rounded-xl border border-line p-3 text-xs" /><div className="mt-3 flex justify-end gap-2"><button disabled={reviewing === request.id} onClick={() => review(request, "reject")} className="rounded-xl border border-red-200 px-4 py-2.5 text-xs font-extrabold text-red-700">Reject</button><button disabled={reviewing === request.id} onClick={() => review(request, "approve")} className="rounded-xl bg-brand px-4 py-2.5 text-xs font-extrabold text-white">{reviewing === request.id ? "Saving…" : "Approve"}</button></div></>}
+        </div>)}
       </div>
     </div>
   );
