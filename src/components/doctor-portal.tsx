@@ -362,6 +362,13 @@ function formatScheduleDate(date: string) {
   });
 }
 
+function scheduleDateForOffset(offset: number) {
+  const date = new Date();
+  date.setHours(12, 0, 0, 0);
+  date.setDate(date.getDate() + offset);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 function DoctorSchedule({
   onOpen,
   onManageAvailability,
@@ -372,7 +379,7 @@ function DoctorSchedule({
   const { appointments } = useApp();
   const [dayOffset, setDayOffset] = useState(0);
   const [view, setView] = useState("Day");
-  const selectedDate = `2026-08-${String(23 + dayOffset).padStart(2, "0")}`;
+  const selectedDate = scheduleDateForOffset(dayOffset);
   const [slots, setSlots] = useState<SlotApi[]>([]);
   const [slotsDate, setSlotsDate] = useState("");
   const [slotsError, setSlotsError] = useState("");
@@ -488,7 +495,7 @@ function DoctorSchedule({
 }
 function DoctorSlots() {
   const [dayOffset, setDayOffset] = useState(0);
-  const selectedDate = `2026-08-${String(23 + dayOffset).padStart(2, "0")}`;
+  const selectedDate = scheduleDateForOffset(dayOffset);
   const [slots, setSlots] = useState<SlotApi[]>([]);
   const [loadedDate, setLoadedDate] = useState("");
   const [error, setError] = useState("");
