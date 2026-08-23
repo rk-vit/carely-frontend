@@ -51,7 +51,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const storedRole = v.role || null;
           setRole(storedRole);
           const valid = storedRole ? await checkSession().catch(() => false) : false;
-          setAuthStatus(valid && storedRole ? "authenticated" : "unauthenticated");
+          if (valid && storedRole) {
+            setAuthStatus("authenticated");
+          } else {
+            setRole(null);
+            setAuthStatus("unauthenticated");
+          }
         } else {
           setAuthStatus("unauthenticated");
         }

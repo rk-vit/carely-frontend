@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Activity,
   AlertTriangle,
@@ -45,6 +46,7 @@ import { useApp } from "@/lib/app-context";
 import { Doctor } from "@/lib/types";
 import { DoctorAvatar, SectionTitle, StatCard, StatusBadge } from "./ui";
 import { GmailLogo, GoogleCalendarLogo } from "./brand";
+import { portalPath } from "@/lib/portal-routes";
 import { createDoctorRequest, DoctorApiResponse, getAdminDoctorRequest, getAdminLeaveRequestsRequest, LeaveRequestApi, reviewAdminLeaveRequest, updateAdminDoctorRequest } from "@/lib/api";
 const nav: NavItem[] = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
@@ -64,9 +66,11 @@ const chart = [
   { d: "19 Aug", v: 61 },
   { d: "20 Aug", v: 58 },
 ];
-export function AdminPortal() {
+export function AdminPortal({ section = "overview" }: { section?: string }) {
+  const router = useRouter();
   const { updateDoctor } = useApp();
-  const [active, setActive] = useState("overview");
+  const active = section;
+  const navigate = (id: string) => router.push(portalPath("admin", id));
   const [add, setAdd] = useState(false);
   const [edit, setEdit] = useState<Doctor | null>(null);
   const [leave, setLeave] = useState<Doctor | null>(null);
@@ -80,7 +84,6 @@ export function AdminPortal() {
       role="admin"
       nav={nav}
       active={active}
-      onNavigate={setActive}
     >
       {toast && (
         <div className="fixed bottom-6 right-6 z-[100] flex items-center gap-2 rounded-2xl bg-ink px-5 py-4 text-xs font-bold text-white shadow-2xl">
@@ -89,7 +92,7 @@ export function AdminPortal() {
         </div>
       )}
       {active === "overview" && (
-        <AdminOverview onNav={setActive} notify={notify} />
+        <AdminOverview onNav={navigate} notify={notify} />
       )}{" "}
       {active === "doctors" && (
         <DoctorsView

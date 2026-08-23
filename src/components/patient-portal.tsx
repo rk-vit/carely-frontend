@@ -1,5 +1,6 @@
 "use client";
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Activity,
   AlarmClock,
@@ -30,6 +31,7 @@ import { useApp } from "@/lib/app-context";
 import { Doctor } from "@/lib/types";
 import { DoctorAvatar, SectionTitle, StatusBadge } from "./ui";
 import { GoogleCalendarLogo, GmailLogo } from "./brand";
+import { portalPath } from "@/lib/portal-routes";
 
 const nav: NavItem[] = [
   { id: "overview", label: "Overview", icon: Home },
@@ -53,8 +55,10 @@ const slots = [
   "04:30 PM",
   "06:00 PM",
 ];
-export function PatientPortal() {
-  const [active, setActive] = useState("overview");
+export function PatientPortal({ section = "overview" }: { section?: string }) {
+  const router = useRouter();
+  const active = section;
+  const navigate = (id: string) => router.push(portalPath("patient", id));
   const [booking, setBooking] = useState<Doctor | null>(null);
   const [toast, setToast] = useState("");
   const { appointments, doctors } = useApp();
@@ -67,7 +71,6 @@ export function PatientPortal() {
       role="patient"
       nav={nav}
       active={active}
-      onNavigate={setActive}
     >
       {toast && (
         <div className="fixed bottom-6 right-6 z-[100] flex max-w-sm items-center gap-3 rounded-2xl bg-ink px-5 py-4 text-sm font-bold text-white shadow-2xl">
@@ -79,7 +82,7 @@ export function PatientPortal() {
         <PatientHome
           appointments={appointments}
           doctors={doctors}
-          onNav={setActive}
+          onNav={navigate}
           onBook={setBooking}
         />
       )}{" "}
@@ -96,7 +99,7 @@ export function PatientPortal() {
           onClose={() => setBooking(null)}
           onSuccess={() => {
             setBooking(null);
-            setActive("appointments");
+            navigate("appointments");
             notify("Appointment booked successfully");
           }}
         />

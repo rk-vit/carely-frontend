@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import Link from "next/link";
 import {
   Bell,
   ChevronDown,
@@ -15,6 +16,7 @@ import { Logo } from "./brand";
 import { useApp } from "@/lib/app-context";
 import { useRouter } from "next/navigation";
 import { Role } from "@/lib/types";
+import { portalPath } from "@/lib/portal-routes";
 
 export interface NavItem {
   id: string;
@@ -26,13 +28,11 @@ export function DashboardShell({
   role,
   nav,
   active,
-  onNavigate,
   children,
 }: {
   role: Role;
   nav: NavItem[];
   active: string;
-  onNavigate: (id: string) => void;
   children: React.ReactNode;
 }) {
   const [mobile, setMobile] = useState(false);
@@ -48,10 +48,6 @@ export function DashboardShell({
       : role === "doctor"
         ? { name: "Dr. Maya Patel", detail: "Cardiologist", initials: "MP" }
         : { name: "Anika Rao", detail: "Administrator", initials: "AR" };
-  function go(id: string) {
-    onNavigate(id);
-    setMobile(false);
-  }
   async function signout() {
     await logout();
     router.replace(`/${role}/login`);
@@ -80,8 +76,9 @@ export function DashboardShell({
         </div>
         <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-5">
           {nav.map(({ id, label, icon: Icon, badge }) => (
-            <button
-              onClick={() => go(id)}
+            <Link
+              href={portalPath(role, id)}
+              onClick={() => setMobile(false)}
               key={id}
               className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-3 text-left text-sm font-bold ${active === id ? "bg-brand-soft text-brand-dark" : "text-[#697874] hover:bg-canvas hover:text-ink"}`}
             >
@@ -94,17 +91,18 @@ export function DashboardShell({
                   {badge}
                 </span>
               )}
-            </button>
+            </Link>
           ))}
         </nav>
         <div className="m-3 space-y-1 border-t border-line pt-3">
-          <button
-            onClick={() => go("settings")}
+          <Link
+            href={portalPath(role, "settings")}
+            onClick={() => setMobile(false)}
             className="flex w-full items-center gap-3 rounded-xl px-3.5 py-3 text-sm font-bold text-muted hover:bg-canvas"
           >
             <Settings size={19} />
             Settings
-          </button>
+          </Link>
           <button
             onClick={() => setHelpOpen(true)}
             className="flex w-full items-center gap-3 rounded-xl px-3.5 py-3 text-sm font-bold text-muted hover:bg-canvas"
@@ -152,17 +150,18 @@ export function DashboardShell({
                     n.label.toLowerCase().includes(search.toLowerCase()),
                   )
                   .map(({ id, label, icon: Icon }) => (
-                    <button
+                    <Link
+                      href={portalPath(role, id)}
                       key={id}
                       onClick={() => {
-                        go(id);
                         setSearch("");
+                        setMobile(false);
                       }}
                       className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-bold hover:bg-canvas"
                     >
                       <Icon size={15} />
                       {label}
-                    </button>
+                    </Link>
                   ))}
                 {nav.every(
                   (n) => !n.label.toLowerCase().includes(search.toLowerCase()),

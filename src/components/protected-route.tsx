@@ -12,7 +12,7 @@ export function ProtectedRoute({ role, children }: { role: Role; children: React
   useEffect(() => {
     if (authStatus === "unauthenticated") router.replace(`/${role}/login`);
     if (authStatus === "authenticated" && signedInRole !== role) {
-      router.replace(`/${signedInRole}/login`);
+      router.replace(signedInRole ? `/${signedInRole}` : `/${role}/login`);
     }
   }, [authStatus, role, router, signedInRole]);
 

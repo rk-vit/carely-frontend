@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Activity,
   ArrowRight,
@@ -25,6 +26,7 @@ import { useApp } from "@/lib/app-context";
 import { Appointment } from "@/lib/types";
 import { SectionTitle, StatCard, StatusBadge } from "./ui";
 import { GoogleCalendarLogo } from "./brand";
+import { portalPath } from "@/lib/portal-routes";
 import { createLeaveRequestRequest, getDoctorLeaveRequestsRequest, getDoctorProfileRequest, updateDoctorProfileRequest, DoctorProfile, LeaveRequestApi } from "@/lib/api";
 const nav: NavItem[] = [
   { id: "overview", label: "Today", icon: Home },
@@ -33,8 +35,10 @@ const nav: NavItem[] = [
   { id: "summaries", label: "Visit summaries", icon: FileHeart, badge: 2 },
   { id: "availability", label: "Availability", icon: Clock3 },
 ];
-export function DoctorPortal() {
-  const [active, setActive] = useState("overview");
+export function DoctorPortal({ section = "overview" }: { section?: string }) {
+  const router = useRouter();
+  const active = section;
+  const navigate = (id: string) => router.push(portalPath("doctor", id));
   const [selected, setSelected] = useState<Appointment | null>(null);
   const [toast, setToast] = useState("");
   function notify(s: string) {
@@ -46,7 +50,6 @@ export function DoctorPortal() {
       role="doctor"
       nav={nav}
       active={active}
-      onNavigate={setActive}
     >
       {toast && (
         <div className="fixed bottom-6 right-6 z-[100] flex items-center gap-2 rounded-2xl bg-ink px-5 py-4 text-xs font-bold text-white shadow-2xl">
@@ -55,7 +58,7 @@ export function DoctorPortal() {
         </div>
       )}
       {active === "overview" && (
-        <DoctorToday onOpen={setSelected} onNav={setActive} />
+        <DoctorToday onOpen={setSelected} onNav={navigate} />
       )}{" "}
       {active === "schedule" && (
         <DoctorSchedule onOpen={setSelected} notify={notify} />
