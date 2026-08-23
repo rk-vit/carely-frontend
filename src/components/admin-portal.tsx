@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -45,7 +45,7 @@ import { useApp } from "@/lib/app-context";
 import { Doctor } from "@/lib/types";
 import { DoctorAvatar, SectionTitle, StatCard, StatusBadge } from "./ui";
 import { GmailLogo, GoogleCalendarLogo } from "./brand";
-import { createDoctorRequest } from "@/lib/api";
+import { createDoctorRequest, DoctorApiResponse, getAdminDoctorRequest, updateAdminDoctorRequest } from "@/lib/api";
 const nav: NavItem[] = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "doctors", label: "Doctors", icon: Stethoscope },
@@ -64,8 +64,10 @@ const chart = [
   { d: "20 Aug", v: 58 },
 ];
 export function AdminPortal() {
+  const { updateDoctor } = useApp();
   const [active, setActive] = useState("overview");
   const [add, setAdd] = useState(false);
+  const [edit, setEdit] = useState<Doctor | null>(null);
   const [leave, setLeave] = useState<Doctor | null>(null);
   const [toast, setToast] = useState("");
   function notify(s: string) {
@@ -91,6 +93,7 @@ export function AdminPortal() {
       {active === "doctors" && (
         <DoctorsView
           add={() => setAdd(true)}
+          edit={setEdit}
           leave={setLeave}
           notify={notify}
         />
@@ -109,6 +112,7 @@ export function AdminPortal() {
           }}
         />
       )}
+      {edit && <EditDoctor close={() => setEdit(null)} doctor={edit} done={(d) => { updateDoctor(d.id, { name: `Dr. ${d.firstName} ${d.lastName}`, specialty: d.specialization, credentials: d.medicalLicenseNumber, experience: d.yearsOfExperience, fee: d.consultationFee, about: d.biography || "" }); setEdit(null); notify("Doctor profile updated"); }} />}
       {leave && (
         <LeaveModal
           doctor={leave}
@@ -407,10 +411,12 @@ function AlertRow({
 }
 function DoctorsView({
   add,
+  edit,
   leave,
   notify,
 }: {
   add: () => void;
+  edit: (doctor: Doctor) => void;
   leave: (d: Doctor) => void;
   notify: (s: string) => void;
 }) {
@@ -418,6 +424,7 @@ function DoctorsView({
   const [query, setQuery] = useState("");
   const [specialty, setSpecialty] = useState("all");
   const [doctorStatus, setDoctorStatus] = useState("all");
+  const [menu, setMenu] = useState<string | null>(null);
   const shownDoctors = doctors.filter(
     (d) =>
       (specialty === "all" || d.specialty === specialty) &&
@@ -504,6 +511,7 @@ function DoctorsView({
                 )}
               </div>
               <div className="mt-4 flex gap-2">
+                <button onClick={() => edit(d)} className="flex-1 rounded-xl border border-line px-3 py-2.5 text-xs font-bold">Edit profile</button>
                 <button
                   onClick={() => leave(d)}
                   className="flex-1 rounded-xl border border-line px-3 py-2.5 text-xs font-bold"
@@ -582,17 +590,15 @@ function DoctorsView({
                       >
                         Manage leave
                       </button>
-                      <button
-                        onClick={() => {
-                          updateDoctor(d.id, { active: !d.active });
-                          notify(
-                            `${d.name} ${d.active ? "deactivated" : "activated"}`,
-                          );
-                        }}
-                        className="grid size-8 place-items-center rounded-lg border border-line"
-                      >
-                        <MoreHorizontal size={15} />
-                      </button>
+                      <div className="relative">
+                        <button onClick={() => setMenu(menu === d.id ? null : d.id)} aria-label={`Actions for ${d.name}`} className="grid size-8 place-items-center rounded-lg border border-line">
+                          <MoreHorizontal size={15} />
+                        </button>
+                        {menu === d.id && <div className="absolute right-0 top-10 z-20 w-44 rounded-xl border border-line bg-white p-1 text-left shadow-xl">
+                          <button onClick={() => { setMenu(null); edit(d); }} className="w-full rounded-lg px-3 py-2 text-xs font-bold hover:bg-canvas">Edit profile</button>
+                          <button onClick={() => { updateDoctor(d.id, { active: !d.active }); setMenu(null); notify(`${d.name} ${d.active ? "deactivated" : "activated"}`); }} className="w-full rounded-lg px-3 py-2 text-xs font-bold hover:bg-canvas">{d.active ? "Deactivate" : "Activate"}</button>
+                        </div>}
+                      </div>
                     </div>
                   </td>
                 </tr>
@@ -1249,6 +1255,34 @@ function AddDoctor({ close, done }: { close: () => void; done: () => void }) {
       </form>
     </div>
   );
+}
+function EditDoctor({ doctor, close, done }: { doctor: Doctor; close: () => void; done: (doctor: DoctorApiResponse) => void }) {
+  const [profile, setProfile] = useState<DoctorApiResponse | null>(null);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { void getAdminDoctorRequest(doctor.id).then(setProfile).catch((e) => setError(e instanceof Error ? e.message : "Unable to load doctor profile.")); }, [doctor.id]);
+  async function save(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault(); if (!profile) return; setSaving(true); setError("");
+    const form = new FormData(e.currentTarget);
+    try { const updated = await updateAdminDoctorRequest(profile.id, { specialization: String(form.get("specialization")), medicalLicenseNumber: String(form.get("license")), yearsOfExperience: Number(form.get("experience")), consultationFee: Number(form.get("fee")), biography: String(form.get("biography")), workingStartTime: String(form.get("start")), workingEndTime: String(form.get("end")), slotDurationMinutes: Number(form.get("slot")) }); done(updated); }
+    catch (e) { setError(e instanceof Error ? e.message : "Unable to update doctor profile."); }
+    finally { setSaving(false); }
+  }
+  return <div className="fixed inset-0 z-[90] grid place-items-center overflow-y-auto bg-ink/40 p-4 backdrop-blur-sm"><form onSubmit={save} className="w-full max-w-lg rounded-[24px] bg-white p-6 shadow-2xl">
+    <div className="flex items-center justify-between"><div><p className="text-[10px] font-extrabold uppercase tracking-wider text-brand">Doctor management</p><h2 className="mt-2 text-xl font-extrabold">Edit doctor profile</h2></div><button aria-label="Close edit doctor form" type="button" onClick={close} className="grid size-9 place-items-center rounded-xl bg-canvas"><X size={18} /></button></div>
+    {!profile && !error && <p className="mt-6 text-sm text-muted">Loading profile…</p>}
+    {error && <p role="alert" className="mt-6 rounded-xl bg-red-50 p-3 text-xs font-bold text-red-700">{error}</p>}
+    {profile && <><p className="mt-5 rounded-xl bg-canvas p-3 text-xs text-muted">{profile.email} · {profile.firstName} {profile.lastName} · {profile.phoneNumber}</p><div className="mt-5 grid gap-4 sm:grid-cols-2">
+      <label className="text-xs font-extrabold">Specialization<input name="specialization" required defaultValue={profile.specialization} className="mt-2 w-full rounded-xl border border-line p-3.5 font-normal" /></label>
+      <label className="text-xs font-extrabold">Medical license<input name="license" required defaultValue={profile.medicalLicenseNumber} className="mt-2 w-full rounded-xl border border-line p-3.5 font-normal" /></label>
+      <label className="text-xs font-extrabold">Experience (years)<input name="experience" type="number" min="0" defaultValue={profile.yearsOfExperience} className="mt-2 w-full rounded-xl border border-line p-3.5 font-normal" /></label>
+      <label className="text-xs font-extrabold">Consultation fee<input name="fee" type="number" min="0" step="0.01" defaultValue={profile.consultationFee} className="mt-2 w-full rounded-xl border border-line p-3.5 font-normal" /></label>
+      <label className="text-xs font-extrabold">Working from<input name="start" type="time" defaultValue={profile.workingStartTime?.slice(0, 5)} className="mt-2 w-full rounded-xl border border-line p-3.5 font-normal" /></label>
+      <label className="text-xs font-extrabold">Working until<input name="end" type="time" defaultValue={profile.workingEndTime?.slice(0, 5)} className="mt-2 w-full rounded-xl border border-line p-3.5 font-normal" /></label>
+      <label className="text-xs font-extrabold">Slot duration<select name="slot" defaultValue={profile.slotDurationMinutes} className="mt-2 w-full rounded-xl border border-line p-3.5 font-normal"><option value="30">30 minutes</option><option value="45">45 minutes</option><option value="60">60 minutes</option></select></label>
+      <label className="text-xs font-extrabold sm:col-span-2">Biography<textarea name="biography" defaultValue={profile.biography || ""} className="mt-2 w-full rounded-xl border border-line p-3.5 font-normal" /></label>
+    </div><div className="mt-6 flex justify-end gap-2"><button type="button" onClick={close} className="rounded-xl border border-line px-5 py-3 text-xs font-bold">Cancel</button><button type="submit" disabled={saving} className="rounded-xl bg-brand px-5 py-3 text-xs font-extrabold text-white">{saving ? "Saving…" : "Save changes"}</button></div></>}
+  </form></div>;
 }
 function LeaveModal({
   doctor,

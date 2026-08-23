@@ -24,6 +24,18 @@ export async function createDoctorRequest(payload: CreateDoctorRequest) {
   if (!response.ok) throw new Error(body?.detail || body?.message || "Unable to create doctor profile.");
   return body as DoctorApiResponse;
 }
+export async function getAdminDoctorRequest(id: string) {
+  const response = await fetch(apiUrl(`/admin/doctors/${id}`), { credentials: "include", cache: "no-store" });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(body?.detail || body?.message || "Unable to load doctor profile.");
+  return body as DoctorApiResponse;
+}
+export async function updateAdminDoctorRequest(id: string, payload: Record<string, unknown>) {
+  const response = await fetch(apiUrl(`/admin/doctors/${id}`), { method: "PATCH", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify(payload) });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(body?.detail || body?.message || "Unable to update doctor profile.");
+  return body as DoctorApiResponse;
+}
 export type DoctorProfile = DoctorApiResponse;
 export async function getDoctorProfileRequest() {
   const response = await fetch(apiUrl("/doctor/profile"), { credentials: "include", cache: "no-store" });
