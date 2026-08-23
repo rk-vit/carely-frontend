@@ -45,6 +45,7 @@ import { useApp } from "@/lib/app-context";
 import { Doctor } from "@/lib/types";
 import { DoctorAvatar, SectionTitle, StatCard, StatusBadge } from "./ui";
 import { GmailLogo, GoogleCalendarLogo } from "./brand";
+import { createDoctorRequest } from "@/lib/api";
 const nav: NavItem[] = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "doctors", label: "Doctors", icon: Stethoscope },
@@ -1122,31 +1123,31 @@ function AdminSettings({ notify }: { notify: (s: string) => void }) {
 function AddDoctor({ close, done }: { close: () => void; done: () => void }) {
   const { addDoctor } = useApp();
   const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [phone, setPhone] = useState("");
   const [specialty, setSpecialty] = useState("General Medicine");
-  function save(e: React.FormEvent) {
+  const [license, setLicense] = useState("");
+  const [experience, setExperience] = useState("0");
+  const [fee, setFee] = useState("600");
+  const [start, setStart] = useState("09:00");
+  const [end, setEnd] = useState("17:00");
+  const [slot, setSlot] = useState("30");
+  const [biography, setBiography] = useState("");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  async function save(e: React.FormEvent) {
     e.preventDefault();
-    addDoctor({
-      id: `d${Date.now()}`,
-      name: `Dr. ${name}`,
-      specialty,
-      credentials: "MBBS, MD",
-      experience: 5,
-      rating: 5,
-      reviews: 0,
-      fee: 600,
-      color: "#DCEFE9",
-      initials: name
-        .split(" ")
-        .map((x) => x[0])
-        .join("")
-        .slice(0, 2)
-        .toUpperCase(),
-      about: "New Carely specialist profile.",
-      languages: ["English", "Hindi"],
-      nextAvailable: "Schedule pending",
-      active: true,
-    });
-    done();
+    setError("");
+    const parts = name.trim().split(/\s+/);
+    if (parts.length < 2) { setError("Enter first and last name."); return; }
+    setSaving(true);
+    try {
+      const d = await createDoctorRequest({ email: email.trim(), temporaryPassword: password, firstName: parts[0], lastName: parts.slice(1).join(" "), phoneNumber: phone.trim(), specialization: specialty, medicalLicenseNumber: license.trim(), yearsOfExperience: Number(experience), consultationFee: Number(fee), biography: biography.trim(), workingStartTime: start, workingEndTime: end, slotDurationMinutes: Number(slot) });
+      addDoctor({ id: d.id, name: `Dr. ${d.firstName} ${d.lastName}`, specialty: d.specialization, credentials: d.medicalLicenseNumber, experience: d.yearsOfExperience, rating: 0, reviews: 0, fee: d.consultationFee, color: "#DCEFE9", initials: `${d.firstName[0]}${d.lastName[0]}`.toUpperCase(), about: d.biography || "", languages: ["English"], nextAvailable: "Schedule pending", active: d.active });
+      done();
+    } catch (e) { setError(e instanceof Error ? e.message : "Unable to create doctor profile."); }
+    finally { setSaving(false); }
   }
   return (
     <div className="fixed inset-0 z-[90] grid place-items-center bg-ink/40 p-4 backdrop-blur-sm">
@@ -1174,7 +1175,7 @@ function AddDoctor({ close, done }: { close: () => void; done: () => void }) {
         </div>
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
           <label className="text-xs font-extrabold sm:col-span-2">
-            Doctor name
+            Full name
             <input
               required
               value={name}
@@ -1183,6 +1184,10 @@ function AddDoctor({ close, done }: { close: () => void; done: () => void }) {
               className="mt-2 w-full rounded-xl border border-line p-3.5 font-normal"
             />
           </label>
+          <label className="text-xs font-extrabold">Login email<input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="mt-2 w-full rounded-xl border border-line p-3.5 font-normal" /></label>
+          <label className="text-xs font-extrabold">Temporary password<input required minLength={8} type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="mt-2 w-full rounded-xl border border-line p-3.5 font-normal" /></label>
+          <label className="text-xs font-extrabold">Phone number<input required value={phone} onChange={(e) => setPhone(e.target.value)} className="mt-2 w-full rounded-xl border border-line p-3.5 font-normal" /></label>
+          <label className="text-xs font-extrabold">Medical license<input required value={license} onChange={(e) => setLicense(e.target.value)} className="mt-2 w-full rounded-xl border border-line p-3.5 font-normal" /></label>
           <label className="text-xs font-extrabold">
             Specialty
             <select
@@ -1200,7 +1205,8 @@ function AddDoctor({ close, done }: { close: () => void; done: () => void }) {
             Consultation fee
             <input
               type="number"
-              defaultValue="600"
+              value={fee}
+              onChange={(e) => setFee(e.target.value)}
               className="mt-2 w-full rounded-xl border border-line p-3.5 font-normal"
             />
           </label>
@@ -1208,18 +1214,23 @@ function AddDoctor({ close, done }: { close: () => void; done: () => void }) {
             Working from
             <input
               type="time"
-              defaultValue="09:00"
+              value={start}
+              onChange={(e) => setStart(e.target.value)}
               className="mt-2 w-full rounded-xl border border-line p-3.5 font-normal"
             />
           </label>
           <label className="text-xs font-extrabold">
             Slot duration
-            <select className="mt-2 w-full rounded-xl border border-line p-3.5 font-normal">
-              <option>45 minutes</option>
-              <option>30 minutes</option>
+            <select value={slot} onChange={(e) => setSlot(e.target.value)} className="mt-2 w-full rounded-xl border border-line p-3.5 font-normal">
+              <option value="30">30 minutes</option>
+              <option value="45">45 minutes</option>
             </select>
           </label>
+          <label className="text-xs font-extrabold">Working until<input required type="time" value={end} onChange={(e) => setEnd(e.target.value)} className="mt-2 w-full rounded-xl border border-line p-3.5 font-normal" /></label>
+          <label className="text-xs font-extrabold">Experience (years)<input type="number" min="0" value={experience} onChange={(e) => setExperience(e.target.value)} className="mt-2 w-full rounded-xl border border-line p-3.5 font-normal" /></label>
+          <label className="text-xs font-extrabold sm:col-span-2">Professional biography<textarea value={biography} onChange={(e) => setBiography(e.target.value)} className="mt-2 w-full rounded-xl border border-line p-3.5 font-normal" /></label>
         </div>
+        {error && <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-xs font-bold text-red-700">{error}</p>}
         <div className="mt-6 flex justify-end gap-2">
           <button
             type="button"
@@ -1232,7 +1243,7 @@ function AddDoctor({ close, done }: { close: () => void; done: () => void }) {
             type="submit"
             className="rounded-xl bg-brand px-5 py-3 text-xs font-extrabold text-white"
           >
-            Create profile
+            {saving ? "Creating…" : "Create profile"}
           </button>
         </div>
       </form>

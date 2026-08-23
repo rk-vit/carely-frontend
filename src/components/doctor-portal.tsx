@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Activity,
   ArrowRight,
@@ -25,6 +25,7 @@ import { useApp } from "@/lib/app-context";
 import { Appointment } from "@/lib/types";
 import { SectionTitle, StatCard, StatusBadge } from "./ui";
 import { GoogleCalendarLogo } from "./brand";
+import { getDoctorProfileRequest, updateDoctorProfileRequest, DoctorProfile } from "@/lib/api";
 const nav: NavItem[] = [
   { id: "overview", label: "Today", icon: Home },
   { id: "schedule", label: "Schedule", icon: CalendarDays },
@@ -793,6 +794,18 @@ function Availability({ notify }: { notify: (s: string) => void }) {
   );
 }
 function DoctorSettings({ notify }: { notify: (s: string) => void }) {
+  const [profile, setProfile] = useState<DoctorProfile | null>(null);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { void getDoctorProfileRequest().then(setProfile).catch((e) => setError(e instanceof Error ? e.message : "Unable to load profile.")); }, []);
+  async function save(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault(); setSaving(true); setError("");
+    const form = new FormData(e.currentTarget);
+    try { await updateDoctorProfileRequest({ consultationFee: Number(form.get("fee")), slotDurationMinutes: Number(form.get("slot")), biography: String(form.get("bio")), workingStartTime: String(form.get("start")), workingEndTime: String(form.get("end")) }); notify("Professional profile updated"); }
+    catch (e) { setError(e instanceof Error ? e.message : "Unable to save profile."); }
+    finally { setSaving(false); }
+  }
+  if (!profile) return <div><Header title="Settings" copy="Manage your professional profile and consultation preferences." /><section className="card max-w-3xl p-6">{error ? <p role="alert" className="text-xs font-bold text-red-700">{error}</p> : <p className="text-sm text-muted">Loading your profile…</p>}</section></div>;
   return (
     <div>
       <Header
@@ -800,13 +813,15 @@ function DoctorSettings({ notify }: { notify: (s: string) => void }) {
         copy="Manage your professional profile and consultation preferences."
       />
       <section className="card max-w-3xl p-6">
+        {error && <p role="alert" className="mb-4 rounded-xl bg-red-50 p-3 text-xs font-bold text-red-700">{error}</p>}
+        <form onSubmit={save}>
         <div className="flex items-center gap-4">
           <span className="grid size-16 place-items-center rounded-2xl bg-[#dcefe9] text-lg font-extrabold">
             MP
           </span>
           <div>
-            <p className="font-extrabold">Dr. Maya Patel</p>
-            <p className="mt-1 text-xs text-muted">Cardiology · MD, FACC</p>
+            <p className="font-extrabold">Dr. {profile.firstName} {profile.lastName}</p>
+            <p className="mt-1 text-xs text-muted">{profile.specialization} · {profile.medicalLicenseNumber}</p>
             <label className="mt-2 block cursor-pointer text-[10px] font-extrabold text-brand">
               <input
                 type="file"
@@ -825,31 +840,35 @@ function DoctorSettings({ notify }: { notify: (s: string) => void }) {
           <label className="text-xs font-extrabold">
             Consultation fee
             <input
-              defaultValue="₹850"
+              name="fee" type="number" defaultValue={profile.consultationFee}
               className="mt-2 w-full rounded-xl border border-line p-3 font-normal"
             />
           </label>
           <label className="text-xs font-extrabold">
             Slot duration
-            <select className="mt-2 w-full rounded-xl border border-line p-3 font-normal">
-              <option>45 minutes</option>
-              <option>30 minutes</option>
+            <select name="slot" defaultValue={profile.slotDurationMinutes} className="mt-2 w-full rounded-xl border border-line p-3 font-normal">
+              <option value="45">45 minutes</option>
+              <option value="30">30 minutes</option>
             </select>
           </label>
           <label className="sm:col-span-2 text-xs font-extrabold">
             Professional bio
             <textarea
-              defaultValue="Specialist in preventive cardiology, hypertension, and long-term heart health."
+              name="bio" defaultValue={profile.biography || ""}
               className="mt-2 w-full rounded-xl border border-line p-3 font-normal"
             />
           </label>
         </div>
-        <button
-          onClick={() => notify("Professional profile updated")}
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <label className="text-xs font-extrabold">Working from<input name="start" type="time" defaultValue={profile.workingStartTime?.slice(0, 5)} className="mt-2 w-full rounded-xl border border-line p-3 font-normal" /></label>
+          <label className="text-xs font-extrabold">Working until<input name="end" type="time" defaultValue={profile.workingEndTime?.slice(0, 5)} className="mt-2 w-full rounded-xl border border-line p-3 font-normal" /></label>
+        </div>
+        <button type="submit" disabled={saving}
           className="mt-6 rounded-xl bg-brand px-5 py-3 text-xs font-extrabold text-white"
         >
-          Save changes
+          {saving ? "Saving…" : "Save changes"}
         </button>
+        </form>
       </section>
     </div>
   );
