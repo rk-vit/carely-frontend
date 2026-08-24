@@ -1134,6 +1134,7 @@ function ConsultationPanel({
   close: () => void;
   notify: (s: string) => void;
 }) {
+  const router = useRouter();
   const { updateAppointment } = useApp();
   const [tab, setTab] = useState<"brief" | "notes">(
     a.status === "completed" ? "notes" : "brief",
@@ -1261,7 +1262,13 @@ function ConsultationPanel({
                 </div>
               </div>
               <button
-                onClick={() => setTab("notes")}
+                onClick={() => router.push(`/doctor/patient-profile/${a.id}`)}
+                className="mt-4 flex w-full items-center justify-center rounded-xl border border-line py-3 text-xs font-extrabold"
+              >
+                View patient profile
+              </button>
+              <button
+                onClick={() => router.push(`/doctor/consultation/${a.id}`)}
                 className="mt-7 flex w-full items-center justify-center gap-2 rounded-xl bg-brand py-3.5 text-xs font-extrabold text-white"
               >
                 Start consultation <ArrowRight size={15} />

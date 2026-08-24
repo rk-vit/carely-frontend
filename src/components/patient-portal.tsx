@@ -52,7 +52,7 @@ export function PatientPortal({ section = "overview" }: { section?: string }) {
   const navigate = (id: string) => router.push(portalPath("patient", id));
   const [booking, setBooking] = useState<Doctor | null>(null);
   const [toast, setToast] = useState("");
-  const { appointments, doctors } = useApp();
+  const { appointments, doctors, patientProfile, patientProfileLoading } = useApp();
   function notify(x: string) {
     setToast(x);
     setTimeout(() => setToast(""), 2600);
@@ -95,7 +95,55 @@ export function PatientPortal({ section = "overview" }: { section?: string }) {
           }}
         />
       )}
+      {!patientProfileLoading && (!patientProfile || !patientProfile.completed) && (
+        <PatientProfileRequired />
+      )}
     </DashboardShell>
+  );
+}
+
+function PatientProfileRequired() {
+  const { patientProfile, savePatientProfile } = useApp();
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  return (
+    <div className="fixed inset-0 z-[120] grid place-items-center bg-ink/45 p-4 backdrop-blur-sm">
+      <form
+        onSubmit={async (event) => {
+          event.preventDefault();
+          setError("");
+          setSaving(true);
+          const form = new FormData(event.currentTarget);
+          try {
+            await savePatientProfile({
+              dateOfBirth: String(form.get("dateOfBirth")),
+              gender: String(form.get("gender")),
+              address: String(form.get("address")),
+              emergencyContactName: String(form.get("emergencyContactName")),
+              emergencyContactPhone: String(form.get("emergencyContactPhone")),
+              allergies: String(form.get("allergies") || ""),
+            });
+          } catch (e) {
+            setError(e instanceof Error ? e.message : "Unable to save your profile.");
+          } finally { setSaving(false); }
+        }}
+        className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-[26px] bg-white p-6 shadow-2xl sm:p-8"
+      >
+        <p className="text-[10px] font-extrabold uppercase tracking-[.16em] text-brand">One quick step</p>
+        <h2 className="mt-2 text-2xl font-extrabold tracking-[-.03em]">Complete your patient profile</h2>
+        <p className="mt-2 text-sm leading-6 text-muted">Your doctor needs these basics before you can book and manage care safely.</p>
+        <div className="mt-6 grid gap-4 sm:grid-cols-2">
+          <label className="text-xs font-extrabold">Date of birth<input required name="dateOfBirth" type="date" defaultValue={patientProfile?.dateOfBirth || ""} className="mt-2 w-full rounded-xl border border-line p-3 font-normal" /></label>
+          <label className="text-xs font-extrabold">Gender<select required name="gender" defaultValue={patientProfile?.gender || ""} className="mt-2 w-full rounded-xl border border-line p-3 font-normal"><option value="">Select</option><option>Female</option><option>Male</option><option>Non-binary</option><option>Prefer not to say</option></select></label>
+          <label className="text-xs font-extrabold sm:col-span-2">Home address<textarea required name="address" defaultValue={patientProfile?.address || ""} rows={2} className="mt-2 w-full rounded-xl border border-line p-3 font-normal" /></label>
+          <label className="text-xs font-extrabold">Emergency contact name<input required name="emergencyContactName" defaultValue={patientProfile?.emergencyContactName || ""} className="mt-2 w-full rounded-xl border border-line p-3 font-normal" /></label>
+          <label className="text-xs font-extrabold">Emergency contact phone<input required name="emergencyContactPhone" defaultValue={patientProfile?.emergencyContactPhone || ""} type="tel" className="mt-2 w-full rounded-xl border border-line p-3 font-normal" /></label>
+          <label className="text-xs font-extrabold sm:col-span-2">Allergies <span className="font-normal text-muted">(optional)</span><textarea name="allergies" defaultValue={patientProfile?.allergies || ""} rows={2} placeholder="List any known allergies, or write None" className="mt-2 w-full rounded-xl border border-line p-3 font-normal" /></label>
+        </div>
+        {error && <p className="mt-4 rounded-xl bg-red-50 p-3 text-xs font-bold text-red-700">{error}</p>}
+        <button disabled={saving} className="mt-6 w-full rounded-xl bg-brand py-3.5 text-xs font-extrabold text-white disabled:opacity-60">{saving ? "Saving profile…" : "Continue to Carely"}</button>
+      </form>
+    </div>
   );
 }
 

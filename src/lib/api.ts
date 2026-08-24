@@ -5,6 +5,79 @@ const CARELY_BACKEND_URL = (
 export const apiUrl = (path: string) =>
   `${CARELY_BACKEND_URL}/${path.replace(/^\//, "")}`;
 
+export interface PatientProfile {
+  patientId: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phoneNumber: string | null;
+  dateOfBirth: string | null;
+  gender: string | null;
+  address: string | null;
+  emergencyContactName: string | null;
+  emergencyContactPhone: string | null;
+  allergies: string | null;
+  completed: boolean;
+  updatedAt: string | null;
+}
+
+export async function getPatientProfileRequest() {
+  const response = await fetch(apiUrl("/users/patient/profile"), { credentials: "include", cache: "no-store" });
+  if (!response.ok) throw new Error(await readApiError(response, "Unable to load your profile."));
+  return (await response.json()) as PatientProfile;
+}
+
+export async function updatePatientProfileRequest(payload: {
+  dateOfBirth: string;
+  gender: string;
+  address: string;
+  emergencyContactName: string;
+  emergencyContactPhone: string;
+  allergies?: string;
+}) {
+  const response = await fetch(apiUrl("/users/patient/profile"), {
+    method: "PATCH", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error(await readApiError(response, "Unable to save your profile."));
+  return (await response.json()) as PatientProfile;
+}
+
+export async function getDoctorPatientProfileRequest(appointmentId: string) {
+  const response = await fetch(apiUrl(`/doctor/appointments/${appointmentId}/patient-profile`), { credentials: "include", cache: "no-store" });
+  if (!response.ok) throw new Error(await readApiError(response, "Unable to load patient profile."));
+  return (await response.json()) as PatientProfile;
+}
+
+export interface ConsultationApi {
+  appointmentId: string;
+  clinicalNotes: string;
+  diagnosis: string | null;
+  prescription: string | null;
+  summary: string | null;
+  followUpDate: string | null;
+  updatedAt: string;
+}
+
+export async function submitDoctorConsultationRequest(id: string, payload: {
+  clinicalNotes: string;
+  diagnosis?: string;
+  prescription?: string;
+  summary?: string;
+  followUpDate?: string;
+}) {
+  const response = await fetch(apiUrl(`/doctor/appointments/${id}/consultation`), {
+    method: "PATCH", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error(await readApiError(response, "Unable to submit consultation."));
+  return (await response.json()) as ConsultationApi;
+}
+
+export async function getPatientConsultationRequest(id: string) {
+  const response = await fetch(apiUrl(`/appointments/${id}/consultation`), { credentials: "include", cache: "no-store" });
+  if (!response.ok) throw new Error(await readApiError(response, "Consultation is not available yet."));
+  return (await response.json()) as ConsultationApi;
+}
+
 export interface CreateDoctorRequest {
   email: string; temporaryPassword: string; firstName: string; lastName: string;
   phoneNumber: string; specialization: string; medicalLicenseNumber: string;

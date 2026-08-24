@@ -7,7 +7,7 @@ import {
   initialNotices,
 } from "./mock-data";
 import { backendRoleToFrontendRole, checkSession, loginRequest, logoutRequest } from "./auth";
-import { AppointmentApi, DoctorDirectoryApiResponse, getAdminAppointmentsRequest, getDoctorAppointmentsRequest, getDoctorsRequest, getMyAppointmentsRequest } from "./api";
+import { AppointmentApi, DoctorDirectoryApiResponse, getAdminAppointmentsRequest, getDoctorAppointmentsRequest, getDoctorsRequest, getMyAppointmentsRequest, getPatientProfileRequest, PatientProfile, updatePatientProfileRequest } from "./api";
 
 interface AppState {
   doctors: Doctor[];
@@ -16,7 +16,10 @@ interface AppState {
   role: Role | null;
   login: (email: string, password: string, expectedRole: Role) => Promise<void>;
   authStatus: "loading" | "authenticated" | "unauthenticated";
+  patientProfile: PatientProfile | null;
+  patientProfileLoading: boolean;
   logout: () => Promise<void>;
+  savePatientProfile: (payload: Parameters<typeof updatePatientProfileRequest>[0]) => Promise<PatientProfile>;
   addAppointment: (data: Omit<Appointment, "id"> & Partial<Pick<Appointment, "id">>) => string;
   updateAppointment: (id: string, patch: Partial<Appointment>) => void;
   updateDoctor: (id: string, patch: Partial<Doctor>) => void;
@@ -90,6 +93,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [notices, setNotices] = useState(initialNotices);
   const [role, setRole] = useState<Role | null>(null);
   const [authStatus, setAuthStatus] = useState<"loading" | "authenticated" | "unauthenticated">("loading");
+  const [patientProfile, setPatientProfile] = useState<PatientProfile | null>(null);
+  const [patientProfileLoading, setPatientProfileLoading] = useState(true);
   const [ready, setReady] = useState(false);
   // Hydrate the demo session once on the client; this mirrors the future API bootstrap.
   useEffect(() => {
@@ -155,6 +160,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, [authStatus, ready, role]);
   useEffect(() => {
+    if (!ready || authStatus !== "authenticated" || role !== "patient") return;
+    void getPatientProfileRequest()
+      .then(setPatientProfile)
+      .catch(() => setPatientProfile(null))
+      .finally(() => setPatientProfileLoading(false));
+  }, [authStatus, ready, role]);
+  useEffect(() => {
     if (ready)
       localStorage.setItem(
         STORAGE,
@@ -168,6 +180,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       notices,
       role,
       authStatus,
+      patientProfile,
+      patientProfileLoading,
       login: async (email, password, expectedRole) => {
         const response = await loginRequest(email, password);
         const authenticatedRole = backendRoleToFrontendRole(response.role);
@@ -182,6 +196,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         await logoutRequest().catch(() => undefined);
         setRole(null);
         setAuthStatus("unauthenticated");
+        setPatientProfile(null);
+      },
+      savePatientProfile: async (payload) => {
+        const saved = await updatePatientProfileRequest(payload);
+        setPatientProfile(saved);
+        return saved;
       },
       addAppointment: (data) => {
         const id = data.id || `APT-${Math.floor(3000 + Math.random() * 6000)}`;
@@ -217,7 +237,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         localStorage.removeItem(STORAGE);
       },
     }),
-    [doctors, appointments, notices, role, authStatus],
+    [doctors, appointments, notices, role, authStatus, patientProfile, patientProfileLoading],
   );
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
