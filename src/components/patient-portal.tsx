@@ -32,7 +32,7 @@ import { Doctor } from "@/lib/types";
 import { DoctorAvatar, SectionTitle, StatusBadge } from "./ui";
 import { GoogleCalendarLogo, GmailLogo } from "./brand";
 import { portalPath } from "@/lib/portal-routes";
-import { createAppointmentHoldRequest, confirmAppointmentRequest, getDoctorSlotsRequest, SlotApi } from "@/lib/api";
+import { cancelAppointmentRequest, createAppointmentHoldRequest, confirmAppointmentRequest, getDoctorSlotsRequest, rescheduleAppointmentRequest, SlotApi } from "@/lib/api";
 
 const nav: NavItem[] = [
   { id: "overview", label: "Overview", icon: Home },
@@ -568,29 +568,32 @@ function AppointmentsView({ onNotify }: { onNotify: (s: string) => void }) {
                     {a.status === "upcoming" && (
                       <>
                         <button
-                          onClick={() => {
-                            updateAppointment(a.id, {
-                              date: "2026-08-22",
-                              time: "03:00 PM",
-                              calendarSynced: true,
-                            });
-                            onNotify(
-                              "Visit moved to 22 August at 3:00 PM; calendar updated",
-                            );
+                          onClick={async () => {
+                            const requested = window.prompt("Enter a new date and time (YYYY-MM-DD HH:MM)", `${a.date} ${a.time.replace(/\s?(AM|PM)$/i, "")}`);
+                            if (!requested) return;
+                            const [date, time] = requested.trim().split(/\s+/);
+                            const start = new Date(`${date}T${time}:00`);
+                            if (Number.isNaN(start.getTime())) { onNotify("Use format YYYY-MM-DD HH:MM"); return; }
+                            const end = new Date(start.getTime() + 30 * 60 * 1000);
+                            try {
+                              const updated = await rescheduleAppointmentRequest(a.id, { startAt: start.toISOString(), endAt: end.toISOString() });
+                              const next = new Date(updated.startAt);
+                              updateAppointment(a.id, { date: updated.startAt.slice(0, 10), time: next.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }), calendarSynced: true });
+                              onNotify("Appointment rescheduled successfully");
+                            } catch (e) { onNotify(e instanceof Error ? e.message : "Unable to reschedule appointment"); }
                           }}
                           className="rounded-xl border border-line px-4 py-2.5 text-xs font-bold"
                         >
                           Reschedule
                         </button>
                         <button
-                          onClick={() => {
-                            updateAppointment(a.id, {
-                              status: "cancelled",
-                              calendarSynced: false,
-                            });
-                            onNotify(
-                              "Appointment cancelled and calendar event removed",
-                            );
+                          onClick={async () => {
+                            if (!window.confirm("Cancel this appointment?")) return;
+                            try {
+                              await cancelAppointmentRequest(a.id);
+                              updateAppointment(a.id, { status: "cancelled", calendarSynced: false });
+                              onNotify("Appointment cancelled");
+                            } catch (e) { onNotify(e instanceof Error ? e.message : "Unable to cancel appointment"); }
                           }}
                           className="rounded-xl border border-red-100 px-4 py-2.5 text-xs font-bold text-red-600"
                         >

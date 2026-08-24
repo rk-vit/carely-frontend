@@ -192,6 +192,20 @@ export async function confirmAppointmentRequest(id: string) {
   return (await response.json()) as AppointmentApi;
 }
 
+export async function cancelAppointmentRequest(id: string) {
+  const response = await fetch(apiUrl(`/appointments/${id}/cancel`), { method: "POST", credentials: "include" });
+  if (!response.ok) throw new Error(await readApiError(response, "Unable to cancel this appointment."));
+  return (await response.json()) as AppointmentApi;
+}
+
+export async function rescheduleAppointmentRequest(id: string, payload: { startAt: string; endAt: string }) {
+  const response = await fetch(apiUrl(`/appointments/${id}/reschedule`), {
+    method: "PATCH", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error(await readApiError(response, "Unable to reschedule this appointment."));
+  return (await response.json()) as AppointmentApi;
+}
+
 export async function getMyAppointmentsRequest() {
   const response = await fetch(apiUrl("/appointments/mine"), { credentials: "include", cache: "no-store" });
   if (!response.ok) throw new Error(await readApiError(response, "Unable to load your appointments."));
@@ -207,6 +221,28 @@ export async function getDoctorAppointmentsRequest() {
     throw new Error(await readApiError(response, "Unable to load your appointments."));
   }
   return (await response.json()) as AppointmentApi[];
+}
+
+export async function updateDoctorAppointmentStatusRequest(id: string, status: "CANCELLED" | "COMPLETED" | "NO_SHOW") {
+  const response = await fetch(apiUrl(`/doctor/appointments/${id}/status`), {
+    method: "PATCH", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ status }),
+  });
+  if (!response.ok) throw new Error(await readApiError(response, "Unable to update appointment status."));
+  return (await response.json()) as AppointmentApi;
+}
+
+export async function getAdminAppointmentsRequest() {
+  const response = await fetch(apiUrl("/admin/appointments"), { credentials: "include", cache: "no-store" });
+  if (!response.ok) throw new Error(await readApiError(response, "Unable to load clinic appointments."));
+  return (await response.json()) as AppointmentApi[];
+}
+
+export async function updateAdminAppointmentStatusRequest(id: string, status: "CANCELLED" | "COMPLETED" | "NO_SHOW") {
+  const response = await fetch(apiUrl(`/admin/appointments/${id}/status`), {
+    method: "PATCH", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ status }),
+  });
+  if (!response.ok) throw new Error(await readApiError(response, "Unable to update appointment status."));
+  return (await response.json()) as AppointmentApi;
 }
 
 export interface LeaveRequestApi {

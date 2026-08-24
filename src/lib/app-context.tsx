@@ -7,7 +7,7 @@ import {
   initialNotices,
 } from "./mock-data";
 import { backendRoleToFrontendRole, checkSession, loginRequest, logoutRequest } from "./auth";
-import { AppointmentApi, DoctorDirectoryApiResponse, getDoctorAppointmentsRequest, getDoctorsRequest, getMyAppointmentsRequest } from "./api";
+import { AppointmentApi, DoctorDirectoryApiResponse, getAdminAppointmentsRequest, getDoctorAppointmentsRequest, getDoctorsRequest, getMyAppointmentsRequest } from "./api";
 
 interface AppState {
   doctors: Doctor[];
@@ -128,13 +128,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!ready || authStatus !== "authenticated" || !role || role === "admin") {
+    if (!ready || authStatus !== "authenticated" || !role) {
       return;
     }
 
     const loadAppointments = role === "patient"
       ? getMyAppointmentsRequest()
-      : getDoctorAppointmentsRequest();
+      : role === "doctor"
+        ? getDoctorAppointmentsRequest()
+        : getAdminAppointmentsRequest();
 
     void loadAppointments
       .then((remoteAppointments) => {

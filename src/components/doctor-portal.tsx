@@ -41,6 +41,7 @@ import {
   getDoctorLeaveRequestsRequest,
   getDoctorProfileRequest,
   getDoctorSlotsRequest,
+  updateDoctorAppointmentStatusRequest,
   saveDoctorAvailabilityRequest,
   updateDoctorProfileRequest,
   DoctorProfile,
@@ -1141,13 +1142,14 @@ function ConsultationPanel({
   const [diagnosis, setDiagnosis] = useState(a.diagnosis || "");
   const [medicine, setMedicine] = useState(a.prescription?.[0].medicine || "");
   const [generating, setGenerating] = useState(false);
-  function complete() {
+  async function complete() {
     if (notes.length < 10) {
       notify("Add clinical notes before completing the visit");
       return;
     }
     setGenerating(true);
-    setTimeout(() => {
+    try {
+      await updateDoctorAppointmentStatusRequest(a.id, "COMPLETED");
       updateAppointment(a.id, {
         status: "completed",
         notes,
@@ -1162,10 +1164,13 @@ function ConsultationPanel({
         ],
         summary: `You were seen for ${a.complaint.toLowerCase()}. ${diagnosis ? `Your doctor diagnosed ${diagnosis}. ` : ""}Follow the medication schedule, rest well, and contact the clinic if your symptoms get worse. A follow-up is recommended in one week.`,
       });
-      setGenerating(false);
       notify("Visit completed and patient summary sent");
       close();
-    }, 900);
+    } catch (e) {
+      notify(e instanceof Error ? e.message : "Unable to complete this visit");
+    } finally {
+      setGenerating(false);
+    }
   }
   return (
     <div className="fixed inset-0 z-[90] flex justify-end bg-ink/35 backdrop-blur-sm">

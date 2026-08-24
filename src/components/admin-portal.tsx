@@ -47,7 +47,7 @@ import { Doctor } from "@/lib/types";
 import { DoctorAvatar, SectionTitle, StatCard, StatusBadge } from "./ui";
 import { GmailLogo, GoogleCalendarLogo } from "./brand";
 import { portalPath } from "@/lib/portal-routes";
-import { createDoctorRequest, DoctorApiResponse, getAdminDoctorRequest, getAdminLeaveRequestsRequest, LeaveRequestApi, reviewAdminLeaveRequest, updateAdminDoctorRequest } from "@/lib/api";
+import { createDoctorRequest, DoctorApiResponse, getAdminDoctorRequest, getAdminLeaveRequestsRequest, LeaveRequestApi, reviewAdminLeaveRequest, updateAdminAppointmentStatusRequest, updateAdminDoctorRequest } from "@/lib/api";
 const nav: NavItem[] = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "doctors", label: "Doctors", icon: Stethoscope },
@@ -740,11 +740,15 @@ function AdminAppointments({ notify }: { notify: (s: string) => void }) {
                   </span>
                 </div>
                 <button
-                  onClick={() => {
-                    const next =
-                      a.status === "upcoming" ? "completed" : "upcoming";
-                    updateAppointment(a.id, { status: next });
-                    notify(`${a.id} marked ${next}`);
+                  onClick={async () => {
+                    const next = a.status === "upcoming" ? "COMPLETED" : a.status === "completed" ? "NO_SHOW" : "CANCELLED";
+                    try {
+                      await updateAdminAppointmentStatusRequest(a.id, next);
+                      updateAppointment(a.id, { status: next === "COMPLETED" ? "completed" : next === "CANCELLED" || next === "NO_SHOW" ? "cancelled" : "upcoming" });
+                      notify(`${a.id} marked ${next.toLowerCase()}`);
+                    } catch (e) {
+                      notify(e instanceof Error ? e.message : "Unable to update appointment");
+                    }
                   }}
                   title="Toggle appointment status"
                   className="grid size-8 place-items-center rounded-lg border border-line"
