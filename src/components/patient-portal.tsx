@@ -1229,6 +1229,7 @@ function BookingModal({
         });
         const confirmed = await confirmAppointmentRequest(hold.id);
         addAppointment({
+          id: confirmed.id,
           doctorId: doctor.id,
           patientName: "You",
           date,

@@ -17,7 +17,7 @@ interface AppState {
   login: (email: string, password: string, expectedRole: Role) => Promise<void>;
   authStatus: "loading" | "authenticated" | "unauthenticated";
   logout: () => Promise<void>;
-  addAppointment: (data: Omit<Appointment, "id">) => string;
+  addAppointment: (data: Omit<Appointment, "id"> & Partial<Pick<Appointment, "id">>) => string;
   updateAppointment: (id: string, patch: Partial<Appointment>) => void;
   updateDoctor: (id: string, patch: Partial<Doctor>) => void;
   addDoctor: (doctor: Doctor) => void;
@@ -184,7 +184,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setAuthStatus("unauthenticated");
       },
       addAppointment: (data) => {
-        const id = `APT-${Math.floor(3000 + Math.random() * 6000)}`;
+        const id = data.id || `APT-${Math.floor(3000 + Math.random() * 6000)}`;
         setAppointments((p) => [{ ...data, id }, ...p]);
         setNotices((p) => [
           {
