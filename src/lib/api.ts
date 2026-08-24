@@ -75,7 +75,7 @@ export interface AvailabilityOverrideApi {
 export interface SlotApi {
   startAt: string;
   endAt: string;
-  status: "AVAILABLE" | "BLOCKED";
+  status: "AVAILABLE" | "BLOCKED" | "BOOKED";
 }
 
 async function readApiError(response: Response, fallback: string) {
@@ -138,6 +138,63 @@ export async function getDoctorSlotsRequest(doctorId: string, date: string) {
   const response = await fetch(apiUrl(`/doctors/${doctorId}/slots?date=${encodeURIComponent(date)}`), { credentials: "include", cache: "no-store" });
   if (!response.ok) throw new Error(await readApiError(response, "Unable to load slots."));
   return (await response.json()) as SlotApi[];
+}
+
+export interface AppointmentApi {
+  id: string;
+  doctorId: string;
+  patientId: string;
+  startAt: string;
+  endAt: string;
+  status: "HELD" | "BOOKED" | "CANCELLED" | "COMPLETED" | "NO_SHOW";
+  symptoms: string;
+  holdExpiresAt: string | null;
+  patientName?: string;
+  patientEmail?: string | null;
+}
+
+export async function createAppointmentHoldRequest(payload: {
+  doctorId: string;
+  startAt: string;
+  endAt: string;
+  symptoms: string;
+}) {
+  const response = await fetch(apiUrl("/appointments/holds"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) throw new Error(await readApiError(response, "That slot is no longer available."));
+  return (await response.json()) as AppointmentApi;
+}
+
+export async function confirmAppointmentRequest(id: string) {
+  const response = await fetch(apiUrl(`/appointments/${id}/confirm`), {
+    method: "POST",
+    credentials: "include",
+  });
+
+  if (!response.ok) throw new Error(await readApiError(response, "Your appointment hold expired. Please choose the slot again."));
+  return (await response.json()) as AppointmentApi;
+}
+
+export async function getMyAppointmentsRequest() {
+  const response = await fetch(apiUrl("/appointments/mine"), { credentials: "include", cache: "no-store" });
+  if (!response.ok) throw new Error(await readApiError(response, "Unable to load your appointments."));
+  return (await response.json()) as AppointmentApi[];
+}
+
+export async function getDoctorAppointmentsRequest() {
+  const response = await fetch(apiUrl("/appointments/doctor"), {
+    credentials: "include",
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(await readApiError(response, "Unable to load your appointments."));
+  }
+  return (await response.json()) as AppointmentApi[];
 }
 
 export interface LeaveRequestApi {

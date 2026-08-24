@@ -7,6 +7,7 @@ import {
   initialNotices,
 } from "./mock-data";
 import { backendRoleToFrontendRole, checkSession, loginRequest, logoutRequest } from "./auth";
+import { AppointmentApi, getDoctorAppointmentsRequest, getMyAppointmentsRequest } from "./api";
 
 interface AppState {
   doctors: Doctor[];
@@ -25,6 +26,42 @@ interface AppState {
 }
 const AppContext = createContext<AppState | null>(null);
 const STORAGE = "carely-demo-v1";
+
+function mapAppointment(api: AppointmentApi, doctors: Doctor[]): Appointment {
+  const start = new Date(api.startAt);
+  const doctor = doctors.find((item) => item.id === api.doctorId);
+  const status: Appointment["status"] =
+    api.status === "COMPLETED"
+      ? "completed"
+      : api.status === "CANCELLED" || api.status === "NO_SHOW"
+        ? "cancelled"
+        : "upcoming";
+  const symptoms = api.symptoms || "No symptoms provided";
+  const urgency = symptoms.toLowerCase().match(/severe|chest pain|faint|breath/)
+    ? "High"
+    : symptoms.length > 45
+      ? "Medium"
+      : "Low";
+
+  return {
+    id: api.id,
+    doctorId: api.doctorId,
+    patientName: api.patientName || "Patient",
+    date: api.startAt.slice(0, 10),
+    time: start.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+    startAt: api.startAt,
+    endAt: api.endAt,
+    type: "In-person visit",
+    status,
+    symptoms,
+    urgency,
+    complaint: symptoms.slice(0, 90),
+    questions: [],
+    calendarSynced: false,
+    emailSent: false,
+    ...(doctor ? {} : { notes: "Doctor profile is no longer available." }),
+  };
+}
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [doctors, setDoctors] = useState(seedDoctors);
@@ -68,6 +105,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
     void hydrate();
   }, []);
+
+  useEffect(() => {
+    if (!ready || authStatus !== "authenticated" || !role || role === "admin") {
+      return;
+    }
+
+    const loadAppointments = role === "patient"
+      ? getMyAppointmentsRequest()
+      : getDoctorAppointmentsRequest();
+
+    void loadAppointments
+      .then((remoteAppointments) => {
+        setAppointments(remoteAppointments.map((appointment) => mapAppointment(appointment, doctors)));
+      })
+      .catch(() => {
+        // Keep the locally cached view if the API is temporarily unavailable.
+      });
+  }, [authStatus, doctors, ready, role]);
   useEffect(() => {
     if (ready)
       localStorage.setItem(

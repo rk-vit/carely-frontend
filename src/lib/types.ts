@@ -29,6 +29,8 @@ export interface Appointment {
   patientName: string;
   date: string;
   time: string;
+  startAt?: string;
+  endAt?: string;
   type: "In-person visit";
   status: AppointmentStatus;
   symptoms: string;

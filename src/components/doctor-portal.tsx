@@ -132,9 +132,20 @@ function DoctorToday({
   onNav: (s: string) => void;
 }) {
   const { appointments } = useApp();
+  const [doctorId, setDoctorId] = useState("");
+  const todayDate = scheduleDateForOffset(0);
+
+  useEffect(() => {
+    void getDoctorProfileRequest()
+      .then((profile) => setDoctorId(profile.id))
+      .catch(() => setDoctorId(""));
+  }, []);
+
   const today = appointments.filter(
     (a) =>
-      a.doctorId === "d1" && a.status === "upcoming" && a.date === "2026-08-20",
+      a.doctorId === doctorId &&
+      a.status === "upcoming" &&
+      a.date === todayDate,
   );
   return (
     <div>
@@ -377,6 +388,7 @@ function DoctorSchedule({
   onManageAvailability: () => void;
 }) {
   const { appointments } = useApp();
+  const [doctorId, setDoctorId] = useState("");
   const [dayOffset, setDayOffset] = useState(0);
   const [view, setView] = useState("Day");
   const selectedDate = scheduleDateForOffset(dayOffset);
@@ -385,12 +397,19 @@ function DoctorSchedule({
   const [slotsError, setSlotsError] = useState("");
   const mine = appointments.filter(
     (a) =>
-      a.doctorId === "d1" && a.status === "upcoming" && a.date === selectedDate,
+      a.doctorId === doctorId &&
+      a.status === "upcoming" &&
+      a.date === selectedDate,
   );
   useEffect(() => {
     let cancelled = false;
     void getDoctorProfileRequest()
-      .then((doctor) => getDoctorSlotsRequest(doctor.id, selectedDate))
+      .then((doctor) => {
+        if (!cancelled) {
+          setDoctorId(doctor.id);
+        }
+        return getDoctorSlotsRequest(doctor.id, selectedDate);
+      })
       .then((loaded) => { if (!cancelled) { setSlots(loaded); setSlotsDate(selectedDate); } })
       .catch((e) => { if (!cancelled) { setSlotsError(e instanceof Error ? e.message : "Unable to load slots."); setSlotsDate(selectedDate); } });
     return () => { cancelled = true; };
@@ -457,7 +476,7 @@ function DoctorSchedule({
               const appointment = mine.find((item) => normaliseTime(item.time) === normaliseTime(startLabel));
               return <div key={slot.startAt} className="grid min-h-20 grid-cols-[72px_1fr] sm:grid-cols-[92px_1fr]">
                 <div className="border-r border-line px-3 py-4 text-right text-[10px] font-extrabold text-muted">{startLabel}</div>
-                {appointment ? <button onClick={() => onOpen(appointment)} className={`m-2 rounded-xl border-l-4 p-3 text-left ${appointment.urgency === "High" ? "border-red-500 bg-red-50" : "border-brand bg-brand-soft"}`}><div className="flex justify-between gap-2"><p className="text-[10px] font-extrabold">{startLabel}–{endLabel} · {appointment.patientName}</p><span className="text-[9px] text-muted">{appointment.type}</span></div><p className="mt-1 truncate text-[9px] text-muted">{appointment.complaint}</p></button> : <div className={`m-2 flex items-center justify-between rounded-xl border px-3 py-2 text-[10px] font-extrabold ${slot.status === "BLOCKED" ? "border-slate-200 bg-slate-100 text-slate-500" : "border-brand/20 bg-brand-soft/40 text-brand-dark"}`}><span>{startLabel}–{endLabel}</span><span className="text-[9px] uppercase tracking-wider opacity-70">{slot.status}</span></div>}
+                {appointment ? <button onClick={() => onOpen(appointment)} className={`m-2 rounded-xl border-l-4 p-3 text-left ${appointment.urgency === "High" ? "border-red-500 bg-red-50" : "border-brand bg-brand-soft"}`}><div className="flex justify-between gap-2"><p className="text-[10px] font-extrabold">{startLabel}–{endLabel} · {appointment.patientName}</p><span className="text-[9px] text-muted">{appointment.type}</span></div><p className="mt-1 truncate text-[9px] text-muted">{appointment.complaint}</p></button> : <div className={`m-2 flex items-center justify-between rounded-xl border px-3 py-2 text-[10px] font-extrabold ${slot.status === "BLOCKED" ? "border-slate-200 bg-slate-100 text-slate-500" : slot.status === "BOOKED" ? "border-blue-200 bg-blue-50 text-blue-900" : "border-brand/20 bg-brand-soft/40 text-brand-dark"}`}><span>{startLabel}–{endLabel}</span><span className="text-[9px] uppercase tracking-wider opacity-70">{slot.status}</span></div>}
               </div>;
             })}
           </div>
@@ -494,7 +513,9 @@ function DoctorSchedule({
   );
 }
 function DoctorSlots() {
+  const { appointments } = useApp();
   const [dayOffset, setDayOffset] = useState(0);
+  const [doctorId, setDoctorId] = useState("");
   const selectedDate = scheduleDateForOffset(dayOffset);
   const [slots, setSlots] = useState<SlotApi[]>([]);
   const [loadedDate, setLoadedDate] = useState("");
@@ -511,7 +532,12 @@ function DoctorSlots() {
   useEffect(() => {
     let cancelled = false;
     void getDoctorProfileRequest()
-      .then((doctor) => getDoctorSlotsRequest(doctor.id, selectedDate))
+      .then((doctor) => {
+        if (!cancelled) {
+          setDoctorId(doctor.id);
+        }
+        return getDoctorSlotsRequest(doctor.id, selectedDate);
+      })
       .then((loaded) => getDoctorAvailabilityOverridesRequest(selectedDate).then((loadedOverrides) => ({ loaded, loadedOverrides })))
       .then(({ loaded, loadedOverrides }) => { if (!cancelled) { setError(""); setSlots(loaded); setOverrides(loadedOverrides); setSelectedSlots(new Set()); setSelectionMode(false); setLoadedDate(selectedDate); } })
       .catch((e) => { if (!cancelled) { setError(e instanceof Error ? e.message : "Unable to load slots."); setLoadedDate(selectedDate); } });
@@ -537,7 +563,14 @@ function DoctorSlots() {
     });
   }
   async function blockSelectedSlots() {
-    const chosen = slots.filter((slot) => selectedSlots.has(slot.startAt) && slot.status === "AVAILABLE");
+    const chosen = slots.filter((slot) => {
+      const appointment = appointments.find(
+        (item) => item.doctorId === doctorId &&
+          item.startAt &&
+          new Date(item.startAt).getTime() === new Date(slot.startAt).getTime(),
+      );
+      return selectedSlots.has(slot.startAt) && slot.status === "AVAILABLE" && !appointment;
+    });
     if (chosen.length === 0) return;
     setBlocking(true); setError("");
     try {
@@ -584,7 +617,73 @@ function DoctorSlots() {
       {error && <p role="alert" className="m-5 rounded-xl bg-red-50 p-3 text-xs font-bold text-red-700">{error}</p>}
       {loadedDate !== selectedDate ? <p className="p-6 text-xs text-muted">Loading slots…</p> : slots.length === 0 ? <p className="p-6 text-xs text-muted">No availability configured for this date.</p> : <>
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4"><p className="text-xs text-muted">{selectionMode ? "Select available slots, then confirm the block." : "Viewing mode — enable selection before choosing slots."}</p><div className="flex flex-wrap items-center gap-2"><button type="button" onClick={() => { setSelectionMode((value) => !value); setSelectedSlots(new Set()); }} disabled={blocking} className={`rounded-xl border px-4 py-2 text-[10px] font-extrabold ${selectionMode ? "border-brand bg-brand-soft text-brand" : "border-line"}`}>{selectionMode ? "Cancel selection" : "Select slots to block"}</button>{selectionMode && <><button type="button" onClick={() => setSelectedSlots(new Set())} disabled={selectedSlots.size === 0 || blocking} className="rounded-xl border border-line px-4 py-2 text-[10px] font-extrabold disabled:opacity-40">Clear</button><button type="button" onClick={() => void blockSelectedSlots()} disabled={selectedSlots.size === 0 || blocking} className="rounded-xl bg-brand px-4 py-2 text-[10px] font-extrabold text-white disabled:opacity-40">{blocking ? "Blocking…" : `Block ${selectedSlots.size || "selected"} slot${selectedSlots.size === 1 ? "" : "s"}`}</button></>}</div></div>
-        <div className="grid gap-3 p-5 sm:grid-cols-3 lg:grid-cols-5">{slots.map((slot) => { const start = new Date(slot.startAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); const end = new Date(slot.endAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); const selected = selectedSlots.has(slot.startAt); const slotStart = slot.startAt.slice(11, 16); const slotEnd = slot.endAt.slice(11, 16); const isExtra = overrides.some((item) => item.type === "EXTRA" && item.startTime.slice(0, 5) <= slotStart && item.endTime.slice(0, 5) >= slotEnd); return <button type="button" disabled={slot.status === "BLOCKED" || blocking || !selectionMode} onClick={() => toggleSlot(slot)} key={slot.startAt} className={`rounded-xl border px-4 py-4 text-left transition ${slot.status === "BLOCKED" ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-600" : selected ? "border-brand bg-brand text-white" : isExtra ? "border-amber-200 bg-amber-50 text-amber-900" : selectionMode ? "border-brand/20 bg-brand-soft text-brand-dark hover:border-brand" : "border-brand/20 bg-brand-soft text-brand-dark"}`}><div className="flex items-center justify-between gap-2"><p className="text-xs font-extrabold">{start}–{end}</p><span className="text-[9px] font-extrabold uppercase tracking-wider opacity-70">{selected ? "SELECTED" : slot.status === "BLOCKED" ? "BLOCKED" : isExtra ? "EXTRA" : "AVAILABLE"}</span></div><p className={`mt-2 text-[10px] ${selected ? "text-white/75" : "text-muted"}`}>{slot.status === "BLOCKED" ? "Unavailable by doctor" : selected ? "Ready to block" : isExtra ? "Extra availability" : "Open for booking"}</p></button>; })}</div>
+        <div className="grid gap-3 p-5 sm:grid-cols-3 lg:grid-cols-5">
+          {slots.map((slot) => {
+            const start = new Date(slot.startAt).toLocaleTimeString([], {
+              hour: "numeric",
+              minute: "2-digit",
+            });
+            const end = new Date(slot.endAt).toLocaleTimeString([], {
+              hour: "numeric",
+              minute: "2-digit",
+            });
+            const appointment = appointments.find(
+              (item) => item.doctorId === doctorId &&
+                item.startAt &&
+                new Date(item.startAt).getTime() === new Date(slot.startAt).getTime(),
+            );
+            const booked = Boolean(appointment);
+            const selected = selectedSlots.has(slot.startAt);
+            const slotStart = slot.startAt.slice(11, 16);
+            const slotEnd = slot.endAt.slice(11, 16);
+            const isExtra = overrides.some(
+              (item) => item.type === "EXTRA" &&
+                item.startTime.slice(0, 5) <= slotStart &&
+                item.endTime.slice(0, 5) >= slotEnd,
+            );
+            const status = booked ? "BOOKED" : slot.status;
+
+            return (
+              <button
+                type="button"
+                disabled={status !== "AVAILABLE" || blocking || !selectionMode}
+                onClick={() => toggleSlot(slot)}
+                key={slot.startAt}
+                className={`rounded-xl border px-4 py-4 text-left transition ${
+                  status === "BLOCKED"
+                    ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-600"
+                    : status === "BOOKED"
+                      ? "cursor-not-allowed border-blue-200 bg-blue-50 text-blue-900"
+                      : selected
+                        ? "border-brand bg-brand text-white"
+                        : isExtra
+                          ? "border-amber-200 bg-amber-50 text-amber-900"
+                          : selectionMode
+                            ? "border-brand/20 bg-brand-soft text-brand-dark hover:border-brand"
+                            : "border-brand/20 bg-brand-soft text-brand-dark"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-extrabold">{start}–{end}</p>
+                  <span className="text-[9px] font-extrabold uppercase tracking-wider opacity-70">
+                    {selected ? "SELECTED" : status === "BOOKED" ? "BOOKED" : status === "BLOCKED" ? "BLOCKED" : isExtra ? "EXTRA" : "AVAILABLE"}
+                  </span>
+                </div>
+                <p className={`mt-2 text-[10px] ${selected ? "text-white/75" : "text-muted"}`}>
+                  {status === "BLOCKED"
+                    ? "Unavailable by doctor"
+                    : status === "BOOKED"
+                      ? appointment?.patientName || "Appointment booked"
+                      : selected
+                        ? "Ready to block"
+                        : isExtra
+                          ? "Extra availability"
+                          : "Open for booking"}
+                </p>
+              </button>
+            );
+          })}
+        </div>
       </>}
       <div className="border-t border-line p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-extrabold">Add extra time</p><p className="mt-1 text-[10px] text-muted">Create availability outside your normal working hours.</p></div><button type="button" onClick={() => setExtraOpen((value) => !value)} className="rounded-xl border border-brand/30 px-4 py-2 text-[10px] font-extrabold text-brand">{extraOpen ? "Cancel" : "Add extra time"}</button></div>{extraOpen && <form onSubmit={addExtraTime} className="mt-4 grid gap-3 sm:grid-cols-3"><label className="text-[10px] font-extrabold">From<input required type="time" step="1800" value={extraStart} onChange={(e) => setExtraStart(e.target.value)} className="mt-2 w-full rounded-xl border border-line p-3 text-xs" /></label><label className="text-[10px] font-extrabold">Until<input required type="time" step="1800" value={extraEnd} onChange={(e) => setExtraEnd(e.target.value)} className="mt-2 w-full rounded-xl border border-line p-3 text-xs" /></label><input value={extraReason} onChange={(e) => setExtraReason(e.target.value)} placeholder="Reason (optional)" className="self-end rounded-xl border border-line p-3 text-xs" /><button type="submit" disabled={savingExtra} className="rounded-xl bg-brand px-4 py-3 text-[10px] font-extrabold text-white sm:col-span-3">{savingExtra ? "Adding…" : "Add extra availability"}</button></form>}</div>
       {overrides.length > 0 && <div className="border-t border-line p-5"><p className="text-sm font-extrabold">Changes for this date</p><div className="mt-3 space-y-2">{overrides.map((item) => <div key={item.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-line p-3 text-[10px]"><span className={`rounded-full px-2 py-1 font-extrabold ${item.type === "BLOCKED" ? "bg-slate-100 text-slate-700" : "bg-emerald-50 text-emerald-700"}`}>{item.type}</span><span className="font-bold">{item.startTime.slice(0, 5)}–{item.endTime.slice(0, 5)}</span><span className="min-w-0 flex-1 text-muted">{item.reason || "No reason provided"}</span><button type="button" onClick={() => void deleteOverride(item)} className="font-extrabold text-red-700">Delete</button></div>)}</div></div>}

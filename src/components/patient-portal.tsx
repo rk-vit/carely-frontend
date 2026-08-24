@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Activity,
@@ -32,6 +32,7 @@ import { Doctor } from "@/lib/types";
 import { DoctorAvatar, SectionTitle, StatusBadge } from "./ui";
 import { GoogleCalendarLogo, GmailLogo } from "./brand";
 import { portalPath } from "@/lib/portal-routes";
+import { createAppointmentHoldRequest, confirmAppointmentRequest, getDoctorSlotsRequest, SlotApi } from "@/lib/api";
 
 const nav: NavItem[] = [
   { id: "overview", label: "Overview", icon: Home },
@@ -44,16 +45,6 @@ const nav: NavItem[] = [
   },
   { id: "records", label: "Health records", icon: FileHeart },
   { id: "medications", label: "Medications", icon: Pill, badge: 1 },
-];
-const slots = [
-  "09:00 AM",
-  "09:45 AM",
-  "10:30 AM",
-  "11:15 AM",
-  "12:00 PM",
-  "03:00 PM",
-  "04:30 PM",
-  "06:00 PM",
 ];
 export function PatientPortal({ section = "overview" }: { section?: string }) {
   const router = useRouter();
@@ -509,7 +500,6 @@ function AppointmentsView({ onNotify }: { onNotify: (s: string) => void }) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const mine = appointments.filter(
     (a) =>
-      a.patientName === "Aarav Sharma" &&
       (tab === "All" ||
         (tab === "Upcoming" && a.status === "upcoming") ||
         (tab === "Past" && a.status === "completed") ||
@@ -1163,10 +1153,12 @@ function BookingModal({
   onClose: () => void;
   onSuccess: () => void;
 }) {
-  const { appointments, addAppointment } = useApp();
+  const { addAppointment } = useApp();
   const [step, setStep] = useState(1);
-  const [date, setDate] = useState("2026-08-22");
-  const [time, setTime] = useState("");
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [selectedSlot, setSelectedSlot] = useState<SlotApi | null>(null);
+  const [availableSlots, setAvailableSlots] = useState<SlotApi[]>([]);
+  const [slotsLoading, setSlotsLoading] = useState(true);
   const [symptoms, setSymptoms] = useState("");
   const [error, setError] = useState("");
   const [processing, setProcessing] = useState(false);
@@ -1175,23 +1167,44 @@ function BookingModal({
     : symptoms.length > 45
       ? "Medium"
       : "Low";
-  const unavailable = useMemo(
-    () =>
-      new Set(
-        appointments
-          .filter(
-            (a) =>
-              a.doctorId === doctor.id &&
-              a.date === date &&
-              a.status === "upcoming",
-          )
-          .map((a) => a.time),
-      ),
-    [appointments, doctor.id, date],
-  );
-  function next() {
+  useEffect(() => {
+    let cancelled = false;
+
+    void getDoctorSlotsRequest(doctor.id, date)
+      .then((slots) => {
+        if (!cancelled) {
+          setAvailableSlots(slots);
+          setError("");
+        }
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setAvailableSlots([]);
+          setError(
+            e instanceof Error
+              ? e.message
+              : "Unable to load available slots.",
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setSlotsLoading(false);
+        }
+      });
+
+    return () => { cancelled = true; };
+  }, [doctor.id, date]);
+
+  function changeDate(nextDate: string) {
+    setDate(nextDate);
+    setSelectedSlot(null);
+    setSlotsLoading(true);
     setError("");
-    if (step === 1 && !time) {
+  }
+  async function next() {
+    setError("");
+    if (step === 1 && !selectedSlot) {
       setError("Choose an available time to continue.");
       return;
     }
@@ -1204,27 +1217,40 @@ function BookingModal({
     if (step < 3) setStep(step + 1);
     else {
       setProcessing(true);
-      setTimeout(() => {
+      try {
+        const hold = await createAppointmentHoldRequest({
+          doctorId: doctor.id,
+          startAt: selectedSlot!.startAt,
+          endAt: selectedSlot!.endAt,
+          symptoms: symptoms.trim(),
+        });
+        const confirmed = await confirmAppointmentRequest(hold.id);
         addAppointment({
           doctorId: doctor.id,
-          patientName: "Aarav Sharma",
+          patientName: "You",
           date,
-          time,
+          time: new Date(confirmed.startAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+          startAt: confirmed.startAt,
+          endAt: confirmed.endAt,
           type: "In-person visit",
           status: "upcoming",
           symptoms,
           urgency,
           complaint: symptoms.slice(0, 90),
-          questions: [
-            "When did you first notice these symptoms?",
-            "What makes them better or worse?",
-            "Have you tried any treatment so far?",
-          ],
-          calendarSynced: true,
-          emailSent: true,
+          questions: [],
+          calendarSynced: false,
+          emailSent: false,
         });
         onSuccess();
-      }, 900);
+      } catch (e) {
+        setError(
+          e instanceof Error
+            ? e.message
+            : "Unable to confirm this appointment.",
+        );
+      } finally {
+        setProcessing(false);
+      }
     }
   }
   return (
@@ -1265,50 +1291,64 @@ function BookingModal({
               <h2 className="mt-2 text-xl font-extrabold">
                 When would you like to visit?
               </h2>
-              <div className="mt-5 grid grid-cols-3 gap-2">
-                <button
-                  onClick={() => setDate("2026-08-21")}
-                  className={`rounded-xl border p-3 text-center ${date === "2026-08-21" ? "border-brand bg-brand-soft" : "border-line"}`}
-                >
-                  <p className="text-[10px] text-muted">FRI</p>
-                  <p className="mt-1 text-lg font-extrabold">21</p>
-                  <p className="text-[10px]">Aug</p>
-                </button>
-                <button
-                  onClick={() => setDate("2026-08-22")}
-                  className={`rounded-xl border p-3 text-center ${date === "2026-08-22" ? "border-brand bg-brand-soft" : "border-line"}`}
-                >
-                  <p className="text-[10px] text-muted">SAT</p>
-                  <p className="mt-1 text-lg font-extrabold">22</p>
-                  <p className="text-[10px]">Aug</p>
-                </button>
-                <button
-                  onClick={() => setDate("2026-08-24")}
-                  className={`rounded-xl border p-3 text-center ${date === "2026-08-24" ? "border-brand bg-brand-soft" : "border-line"}`}
-                >
-                  <p className="text-[10px] text-muted">MON</p>
-                  <p className="mt-1 text-lg font-extrabold">24</p>
-                  <p className="text-[10px]">Aug</p>
-                </button>
-              </div>
+              <input
+                type="date"
+                min={new Date().toISOString().slice(0, 10)}
+                value={date}
+                onChange={(e) => changeDate(e.target.value)}
+                className="mt-5 w-full rounded-xl border border-line p-3 text-xs font-bold"
+              />
               <p className="mt-6 text-xs font-extrabold">
                 Available times{" "}
                 <span className="ml-2 font-normal text-muted">
-                  45 min slots
+                  30 min slots
                 </span>
               </p>
-              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {slots.map((s) => (
-                  <button
-                    disabled={unavailable.has(s)}
-                    onClick={() => setTime(s)}
-                    key={s}
-                    className={`rounded-xl border px-3 py-3 text-[11px] font-bold ${unavailable.has(s) ? "cursor-not-allowed bg-slate-50 text-slate-300 line-through" : time === s ? "border-brand bg-brand text-white" : "border-line hover:border-brand"}`}
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
+              {slotsLoading ? (
+                <p className="mt-3 rounded-xl bg-canvas p-4 text-xs text-muted">
+                  Loading available slots…
+                </p>
+              ) : availableSlots.length === 0 ? (
+                <p className="mt-3 rounded-xl bg-canvas p-4 text-xs text-muted">
+                  No future slots are available on this date.
+                </p>
+              ) : (
+                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {availableSlots.map((slot) => {
+                    const start = new Date(slot.startAt).toLocaleTimeString([], {
+                      hour: "numeric",
+                      minute: "2-digit",
+                    });
+                    const end = new Date(slot.endAt).toLocaleTimeString([], {
+                      hour: "numeric",
+                      minute: "2-digit",
+                    });
+                    const unavailable = slot.status !== "AVAILABLE";
+                    const selected = selectedSlot?.startAt === slot.startAt;
+
+                    return (
+                      <button
+                        key={slot.startAt}
+                        type="button"
+                        disabled={unavailable}
+                        onClick={() => setSelectedSlot(slot)}
+                        className={`rounded-xl border px-3 py-3 text-[11px] font-bold ${
+                          unavailable
+                            ? "cursor-not-allowed bg-slate-50 text-slate-300 line-through"
+                            : selected
+                              ? "border-brand bg-brand text-white"
+                              : "border-line hover:border-brand"
+                        }`}
+                      >
+                        {start}–{end}
+                        {unavailable && (
+                          <span className="mt-1 block text-[9px]">Blocked</span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
               <div className="mt-6 flex items-center gap-3 rounded-xl border border-brand bg-brand-soft p-4 text-xs font-bold text-brand-dark">
                 <MapPin size={18} className="text-brand" />
                 In-person visit · Carely Medical Centre
@@ -1372,7 +1412,15 @@ function BookingModal({
                       DATE & TIME
                     </span>
                     <b className="mt-1 block">
-                      {date.split("-").reverse().join("/")} · {time}
+                      {date.split("-").reverse().join("/")} · {selectedSlot
+                        ? `${new Date(selectedSlot.startAt).toLocaleTimeString([], {
+                            hour: "numeric",
+                            minute: "2-digit",
+                          })}–${new Date(selectedSlot.endAt).toLocaleTimeString([], {
+                            hour: "numeric",
+                            minute: "2-digit",
+                          })}`
+                        : "Select a time"}
                     </b>
                   </p>
                   <p>
