@@ -18,6 +18,12 @@ export interface DoctorApiResponse {
   workingStartTime: string | null; workingEndTime: string | null;
   slotDurationMinutes: number; active: boolean;
 }
+export interface DoctorDirectoryApiResponse {
+  id: string; firstName: string; lastName: string; specialization: string;
+  yearsOfExperience: number; consultationFee: number; biography: string | null;
+  workingStartTime: string | null; workingEndTime: string | null;
+  slotDurationMinutes: number; active: boolean;
+}
 export async function createDoctorRequest(payload: CreateDoctorRequest) {
   const response = await fetch(apiUrl("/admin/doctors"), { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify(payload) });
   const body = await response.json().catch(() => null);
@@ -29,6 +35,12 @@ export async function getAdminDoctorRequest(id: string) {
   const body = await response.json().catch(() => null);
   if (!response.ok) throw new Error(body?.detail || body?.message || "Unable to load doctor profile.");
   return body as DoctorApiResponse;
+}
+export async function getDoctorsRequest() {
+  const response = await fetch(apiUrl("/doctors"), { credentials: "include", cache: "no-store" });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(body?.detail || body?.message || "Unable to load doctors.");
+  return body as DoctorDirectoryApiResponse[];
 }
 export async function updateAdminDoctorRequest(id: string, payload: Record<string, unknown>) {
   const response = await fetch(apiUrl(`/admin/doctors/${id}`), { method: "PATCH", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify(payload) });

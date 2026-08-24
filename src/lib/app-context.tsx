@@ -7,7 +7,7 @@ import {
   initialNotices,
 } from "./mock-data";
 import { backendRoleToFrontendRole, checkSession, loginRequest, logoutRequest } from "./auth";
-import { AppointmentApi, getDoctorAppointmentsRequest, getMyAppointmentsRequest } from "./api";
+import { AppointmentApi, DoctorDirectoryApiResponse, getDoctorAppointmentsRequest, getDoctorsRequest, getMyAppointmentsRequest } from "./api";
 
 interface AppState {
   doctors: Doctor[];
@@ -60,6 +60,27 @@ function mapAppointment(api: AppointmentApi, doctors: Doctor[]): Appointment {
     calendarSynced: false,
     emailSent: false,
     ...(doctor ? {} : { notes: "Doctor profile is no longer available." }),
+  };
+}
+
+function mapDoctor(api: DoctorDirectoryApiResponse): Doctor {
+  const firstName = api.firstName || "Doctor";
+  const lastName = api.lastName || "";
+  return {
+    id: api.id,
+    name: `Dr. ${firstName} ${lastName}`.trim(),
+    specialty: api.specialization,
+    credentials: "Carely specialist",
+    experience: api.yearsOfExperience,
+    rating: 0,
+    reviews: 0,
+    fee: Number(api.consultationFee),
+    color: "#DCEFE9",
+    initials: `${firstName[0] || "D"}${lastName[0] || ""}`.toUpperCase(),
+    about: api.biography || "",
+    languages: ["English"],
+    nextAvailable: "Schedule pending",
+    active: api.active,
   };
 }
 
@@ -123,6 +144,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // Keep the locally cached view if the API is temporarily unavailable.
       });
   }, [authStatus, doctors, ready, role]);
+  useEffect(() => {
+    if (!ready || authStatus !== "authenticated" || (role !== "patient" && role !== "admin")) return;
+    void getDoctorsRequest().then((remoteDoctors) => {
+      setDoctors(remoteDoctors.map(mapDoctor));
+    }).catch(() => {
+      // Keep the locally cached/seeded directory if the API is temporarily unavailable.
+    });
+  }, [authStatus, ready, role]);
   useEffect(() => {
     if (ready)
       localStorage.setItem(
